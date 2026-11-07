@@ -1,0 +1,15 @@
+<resources>
+    <string name="app_name">IDN Live Recorder</string>
+    <string name="notification_channel_name">Recording Service</string>
+    <string name="notification_channel_desc">Active screen recording notification and controls</string>
+    <string name="recording_in_progress">Screen recording in progress</string>
+    <string name="recording_tap_to_return">Tap to return to IDN Live Recorder</string>
+    <string name="action_stop">Stop</string>
+    <string name="notification_channel_detection_name">Live Stream Detection</string>
+    <string name="notification_channel_detection_desc">Alerts when an IDN streamer starts a live stream</string>
+    <string name="action_view">Lihat</string>
+    <string name="action_ignore">Abaikan</string>
+    <string name="detection_title">Streamer sedang Live!</string>
+    <string name="detection_body">%1$s terdeteksi sedang live di IDN.</string>
+</resources>
+
