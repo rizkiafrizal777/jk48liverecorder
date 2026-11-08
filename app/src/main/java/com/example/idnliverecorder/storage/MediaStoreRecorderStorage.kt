@@ -53,6 +53,41 @@ object MediaStoreRecorderStorage {
         return OutputSession(uri = uri, displayName = displayName, parcelFileDescriptor = pfd)
     }
 
+    /**
+     * Creates a pending video file for Phase 5 Direct JKT48 Livestream recording.
+     * Naming standard: JKT48_{MemberName}_{DateTime}.mp4
+     * Destination folder: Movies/IDNLiveRecorder/
+     */
+    fun createPendingDirectVideo(context: Context, memberName: String): OutputSession {
+        val resolver = context.contentResolver
+        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        val sanitizedMember = memberName.replace("[^a-zA-Z0-9]".toRegex(), "_").trim('_')
+        val displayName = "JKT48_${sanitizedMember}_${timeStamp}.mp4"
+
+        val values = ContentValues().apply {
+            put(MediaStore.Video.Media.DISPLAY_NAME, displayName)
+            put(MediaStore.Video.Media.MIME_TYPE, Constants.VIDEO_MIME_TYPE)
+            put(
+                MediaStore.Video.Media.RELATIVE_PATH,
+                "${Environment.DIRECTORY_MOVIES}/${Constants.TARGET_DIRECTORY_NAME}"
+            )
+            put(MediaStore.Video.Media.DATE_ADDED, System.currentTimeMillis() / 1000)
+            put(MediaStore.Video.Media.IS_PENDING, 1)
+        }
+
+        val uri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
+            ?: throw IllegalStateException("Failed to insert JKT48 direct video record into MediaStore.")
+
+        val pfd = resolver.openFileDescriptor(uri, "rw")
+            ?: run {
+                resolver.delete(uri, null, null)
+                throw IllegalStateException("Failed to open file descriptor for Uri: $uri")
+            }
+
+        Log.d(TAG, "Created pending JKT48 direct video session: uri=$uri, displayName=$displayName")
+        return OutputSession(uri = uri, displayName = displayName, parcelFileDescriptor = pfd)
+    }
+
     fun finalizeVideo(
         context: Context,
         uri: Uri,
