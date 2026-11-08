@@ -42,9 +42,9 @@ data class LiveSourceCapabilities(
                 supportsBackgroundRecording = true,
                 recordsOtherApplications = false,
                 recordsUiElements = false,
-                displayName = "Official Live Stream Recording",
+                displayName = "Direct Stream Integration",
                 description = "Direct stream capture via official IDN SDK / partner API without recording the device screen.",
-                availabilityNotice = "Official live stream integration is not available."
+                availabilityNotice = "WAITING FOR AUTHORIZATION — Fitur direct stream belum diaktifkan karena masih menunggu persetujuan akses dan ketentuan penggunaan."
             )
         }
 

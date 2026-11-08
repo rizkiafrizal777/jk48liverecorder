@@ -13,9 +13,9 @@ enum class LiveSourceType(val displayName: String) {
 
     /**
      * Future direct live stream ingest via official IDN SDK / API.
-     * Currently unavailable until an authorized integration is provided.
+     * Currently waiting for authorization.
      */
-    OfficialLiveStream("Official Live Stream"),
+    OfficialLiveStream("Direct Stream Integration"),
 
     /**
      * Unsupported or invalid source mode.

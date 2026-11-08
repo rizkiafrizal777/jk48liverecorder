@@ -26,7 +26,7 @@ class OfficialStreamProvider(
     companion object {
         private const val TAG = "OfficialStreamProvider"
         const val CODE_UNSUPPORTED = "UNSUPPORTED_OFFICIAL_SOURCE"
-        const val MESSAGE_UNSUPPORTED = "Official live stream integration is not available."
+        const val MESSAGE_UNSUPPORTED = "WAITING FOR AUTHORIZATION — Fitur direct stream belum diaktifkan karena masih menunggu persetujuan akses dan ketentuan penggunaan."
     }
 
     override val type: LiveSourceType = LiveSourceType.OfficialLiveStream

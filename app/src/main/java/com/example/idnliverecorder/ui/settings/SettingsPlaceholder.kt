@@ -522,6 +522,9 @@ fun FullSettingsSection(
 
         // SECTION 3: Storage & Engine Specs (Phase 1 Preserved)
         StorageAndConfigCard(activeConfig = activeConfig)
+
+        // SECTION 4: JKT48Connect Review & Integration Info
+        Jkt48ConnectIntegrationCard()
     }
 }
 
@@ -631,5 +634,80 @@ private fun ConfigRow(
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium
         )
+    }
+}
+
+@Composable
+fun Jkt48ConnectIntegrationCard(
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(SurfaceDark)
+            .border(1.dp, CardBorder, RoundedCornerShape(16.dp))
+            .padding(18.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Key,
+                contentDescription = null,
+                tint = PrimaryRed,
+                modifier = Modifier.padding(end = 8.dp)
+            )
+            Text(
+                text = "JKT48Connect Developer Program",
+                color = TextPrimary,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        ConfigRow(
+            icon = Icons.Default.Info,
+            label = "API Provider",
+            value = "JKT48Connect v2 (REST)"
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        ConfigRow(
+            icon = Icons.Default.Videocam,
+            label = "Direct Stream Status",
+            value = "WAITING FOR AUTHORIZATION",
+            valueColor = AccentAmber
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        ConfigRow(
+            icon = Icons.Default.Security,
+            label = "Kredensial & Secrets",
+            value = "Local Storage • Redacted Logs",
+            valueColor = AccentGreen
+        )
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFF141722))
+                .padding(10.dp)
+        ) {
+            Text(
+                text = "Aplikasi ini dirancang untuk peninjauan Free Developer Program JKT48Connect. Tidak ada endpoint ilegal atau token internal yang diekstraksi.",
+                color = TextTertiary,
+                fontSize = 11.sp,
+                lineHeight = 15.sp
+            )
+        }
     }
 }

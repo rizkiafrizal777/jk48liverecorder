@@ -15,5 +15,15 @@ data class DetectedLiveItem(
     val status: DetectionStatus = DetectionStatus.Waiting,
     val packageName: String,
     val matchedKeyword: String
-)
+) {
+    /**
+     * Determines whether this item was created as a test simulation / demo.
+     */
+    val isSimulation: Boolean
+        get() = id.startsWith("test_") ||
+                packageName.contains("test", ignoreCase = true) ||
+                matchedKeyword.contains("test", ignoreCase = true) ||
+                matchedKeyword.contains("simulasi", ignoreCase = true) ||
+                streamerName.contains("simulasi", ignoreCase = true)
+}
 

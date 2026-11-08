@@ -101,12 +101,19 @@ fun LiveDetectionStatusCard(
                     modifier = Modifier.size(22.dp)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "IDN Live Detection",
-                    color = TextPrimary,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Column {
+                    Text(
+                        text = "IDN Live Detection",
+                        color = TextPrimary,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Notification Monitor (Bukan Status Rekaman)",
+                        color = TextTertiary,
+                        fontSize = 10.sp
+                    )
+                }
             }
 
             // Status Badge
@@ -211,29 +218,29 @@ fun LiveDetectionStatusCard(
                 )
             }
 
-            // Detections Today
+            // Detections Today (Notification count, not recorded files)
             Column(
                 modifier = Modifier
-                    .weight(0.8f)
+                    .weight(0.9f)
                     .clip(RoundedCornerShape(12.dp))
                     .background(SurfaceVariantDark)
                     .padding(12.dp)
             ) {
                 Text(
-                    text = "TODAY",
+                    text = "NOTIF HARI INI",
                     color = TextTertiary,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.SemiBold
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "$todayCount Live",
+                    text = "$todayCount Notif",
                     color = AccentCyan,
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Detected",
+                    text = "Live Terdeteksi",
                     color = TextTertiary,
                     fontSize = 10.sp
                 )
@@ -271,12 +278,30 @@ fun LiveDetectionStatusCard(
                 Spacer(modifier = Modifier.width(10.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Terakhir: ${latestDetection.streamerName}",
-                        color = TextPrimary,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Terakhir: ${latestDetection.streamerName}",
+                            color = TextPrimary,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        if (latestDetection.isSimulation) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(AccentAmber.copy(alpha = 0.2f))
+                                    .padding(horizontal = 5.dp, vertical = 1.dp)
+                            ) {
+                                Text(
+                                    text = "SIMULASI",
+                                    color = AccentAmber,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
                     Text(
                         text = latestDetection.detectedAtMs.formatDate(),
                         color = TextTertiary,

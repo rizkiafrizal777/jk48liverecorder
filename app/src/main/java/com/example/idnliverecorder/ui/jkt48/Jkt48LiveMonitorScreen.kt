@@ -20,10 +20,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.LiveTv
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
@@ -34,6 +36,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -66,6 +69,9 @@ import com.example.idnliverecorder.ui.theme.SurfaceVariantDark
 import com.example.idnliverecorder.ui.theme.TextPrimary
 import com.example.idnliverecorder.ui.theme.TextSecondary
 import com.example.idnliverecorder.ui.theme.TextTertiary
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun Jkt48LiveMonitorScreen(
@@ -74,10 +80,13 @@ fun Jkt48LiveMonitorScreen(
     onRefresh: () -> Unit,
     onToggleFavorite: (String) -> Unit,
     onSaveApiKey: (String) -> Unit,
+    onLoadDemoData: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showApiKeyDialog by remember { mutableStateOf(false) }
+    var selectedMemberForDetail by remember { mutableStateOf<Jkt48LiveMember?>(null) }
 
+    // API Key Dialog
     if (showApiKeyDialog) {
         ApiKeyConfigDialog(
             currentKey = apiKey,
@@ -86,6 +95,16 @@ fun Jkt48LiveMonitorScreen(
                 showApiKeyDialog = false
             },
             onDismiss = { showApiKeyDialog = false }
+        )
+    }
+
+    // Livestream Detail Dialog (Requirement 3)
+    selectedMemberForDetail?.let { member ->
+        val isDemo = (uiState is Jkt48LiveUiState.Success && uiState.isDemoData)
+        LivestreamDetailDialog(
+            member = member,
+            isDemoData = isDemo,
+            onDismiss = { selectedMemberForDetail = null }
         )
     }
 
@@ -119,7 +138,7 @@ fun Jkt48LiveMonitorScreen(
                 }
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "IDN Live Tracker via JKT48Connect API",
+                    text = "IDN Live Tracker • JKT48Connect Review",
                     color = TextTertiary,
                     fontSize = 12.sp
                 )
@@ -144,43 +163,112 @@ fun Jkt48LiveMonitorScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
-        // Security Warning Banner (Requirement 10)
-        Box(
+        // Data Source Attribution & Last Updated Header
+        val lastUpdatedFormatted = when (uiState) {
+            is Jkt48LiveUiState.Success -> formatTime(uiState.lastUpdatedMs)
+            is Jkt48LiveUiState.Empty -> formatTime(uiState.lastCheckedMs)
+            else -> "—"
+        }
+
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color(0xFF1E1715))
-                .border(1.dp, AccentAmber.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
-                .padding(12.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFF141722))
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.Top) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    imageVector = Icons.Default.Warning,
+                    imageVector = Icons.Default.Info,
                     contentDescription = null,
-                    tint = AccentAmber,
-                    modifier = Modifier.size(18.dp)
+                    tint = AccentCyan,
+                    modifier = Modifier.size(13.dp)
                 )
-                Spacer(modifier = Modifier.width(10.dp))
-                Column {
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Sumber: JKT48Connect API",
+                    color = TextSecondary,
+                    fontSize = 11.sp
+                )
+            }
+
+            Text(
+                text = "Pembaruan: $lastUpdatedFormatted",
+                color = TextTertiary,
+                fontSize = 11.sp
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Demo Data Notice Banner (Requirement 2: Data simulasi harus diberi label DEMO)
+        if (uiState is Jkt48LiveUiState.Success && uiState.isDemoData) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFF221A15))
+                    .border(1.dp, AccentAmber.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                    .padding(10.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(AccentAmber)
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "DEMO DATA",
+                            color = Color.Black,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Peringatan Keamanan API Key",
+                        text = "Data sampel untuk peninjauan Free Developer Program JKT48Connect.",
                         color = AccentAmber,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "API key disimpan secara lokal di perangkat ini dan tidak dikirim ke logcat. Jangan gunakan API key produksi pada APK publik.",
-                        color = TextSecondary,
                         fontSize = 11.sp,
                         lineHeight = 15.sp
                     )
                 }
             }
+            Spacer(modifier = Modifier.height(12.dp))
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        // Security Warning Banner (Requirement 10 Phase 4A)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFF161922))
+                .padding(10.dp)
+        ) {
+            Row(verticalAlignment = Alignment.Top) {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = AccentCyan,
+                    modifier = Modifier
+                        .size(15.dp)
+                        .padding(top = 1.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "API Key disimpan secara lokal di perangkat. Kredensial tidak pernah dikirim ke logcat atau publik.",
+                    color = TextTertiary,
+                    fontSize = 10.sp,
+                    lineHeight = 14.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
 
         // Content Area based on UiState
         when (uiState) {
@@ -195,7 +283,7 @@ fun Jkt48LiveMonitorScreen(
                         CircularProgressIndicator(color = PrimaryRed, strokeWidth = 3.dp)
                         Spacer(modifier = Modifier.height(14.dp))
                         Text(
-                            text = "Memeriksa live JKT48...",
+                            text = "Memeriksa live stream JKT48...",
                             color = TextSecondary,
                             fontSize = 13.sp
                         )
@@ -222,7 +310,7 @@ fun Jkt48LiveMonitorScreen(
                         )
                         Spacer(modifier = Modifier.height(14.dp))
                         Text(
-                            text = "Tidak Ada Live",
+                            text = "Tidak Ada Livestream Aktif",
                             color = TextPrimary,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.SemiBold
@@ -235,11 +323,20 @@ fun Jkt48LiveMonitorScreen(
                             lineHeight = 16.sp
                         )
                         Spacer(modifier = Modifier.height(16.dp))
-                        Button(
-                            onClick = onRefresh,
-                            colors = ButtonDefaults.buttonColors(containerColor = SurfaceVariantDark)
-                        ) {
-                            Text("Cek Ulang", color = TextPrimary, fontSize = 13.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Button(
+                                onClick = onRefresh,
+                                colors = ButtonDefaults.buttonColors(containerColor = SurfaceVariantDark)
+                            ) {
+                                Text("Cek Ulang", color = TextPrimary, fontSize = 13.sp)
+                            }
+                            OutlinedButton(
+                                onClick = onLoadDemoData,
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = AccentAmber),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, AccentAmber.copy(alpha = 0.5f))
+                            ) {
+                                Text("Muat Demo", fontSize = 13.sp)
+                            }
                         }
                     }
                 }
@@ -283,19 +380,29 @@ fun Jkt48LiveMonitorScreen(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        if (uiState.isApiKeyMissing) {
-                            Button(
-                                onClick = { showApiKeyDialog = true },
-                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryRed)
-                            ) {
-                                Text("Atur API Key", color = Color.White, fontSize = 13.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            if (uiState.isApiKeyMissing) {
+                                Button(
+                                    onClick = { showApiKeyDialog = true },
+                                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryRed)
+                                ) {
+                                    Text("Atur API Key", color = Color.White, fontSize = 13.sp)
+                                }
+                            } else if (uiState.canRetry) {
+                                Button(
+                                    onClick = onRefresh,
+                                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryRed)
+                                ) {
+                                    Text("Coba Lagi", color = Color.White, fontSize = 13.sp)
+                                }
                             }
-                        } else if (uiState.canRetry) {
-                            Button(
-                                onClick = onRefresh,
-                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryRed)
+
+                            OutlinedButton(
+                                onClick = onLoadDemoData,
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = AccentAmber),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, AccentAmber.copy(alpha = 0.5f))
                             ) {
-                                Text("Coba Lagi", color = Color.White, fontSize = 13.sp)
+                                Text("Tampilkan Demo", fontSize = 13.sp)
                             }
                         }
                     }
@@ -304,21 +411,37 @@ fun Jkt48LiveMonitorScreen(
 
             is Jkt48LiveUiState.Success -> {
                 LazyColumn(
-                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     item {
-                        Text(
-                            text = "Member Sedang Live (${uiState.members.size})",
-                            color = AccentGreen,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Member Sedang Live (${uiState.members.size})",
+                                color = AccentGreen,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            Text(
+                                text = "Ketuk untuk melihat detail",
+                                color = TextTertiary,
+                                fontSize = 11.sp
+                            )
+                        }
                     }
 
                     items(uiState.members, key = { it.sessionKey }) { member ->
                         LiveMemberCard(
                             member = member,
+                            isDemo = uiState.isDemoData,
+                            onCardClick = { selectedMemberForDetail = member },
                             onToggleFavorite = { onToggleFavorite(member.memberName) }
                         )
                     }
@@ -333,17 +456,17 @@ fun Jkt48LiveMonitorScreen(
 @Composable
 private fun LiveMemberCard(
     member: Jkt48LiveMember,
+    isDemo: Boolean,
+    onCardClick: () -> Unit,
     onToggleFavorite: () -> Unit
 ) {
-    var expandedDetails by remember { mutableStateOf(false) }
-
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(SurfaceDark)
-            .border(1.dp, CardBorder, RoundedCornerShape(16.dp))
-            .clickable { expandedDetails = !expandedDetails }
+            .border(1.dp, if (isDemo) CardBorder else CardBorder, RoundedCornerShape(16.dp))
+            .clickable { onCardClick() }
             .padding(14.dp)
     ) {
         Row(
@@ -353,7 +476,7 @@ private fun LiveMemberCard(
             // Thumbnail / Avatar Image via Coil
             Box(
                 modifier = Modifier
-                    .size(56.dp)
+                    .size(58.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(SurfaceVariantDark),
                 contentAlignment = Alignment.Center
@@ -440,38 +563,21 @@ private fun LiveMemberCard(
                 }
             }
 
-            // Favorite button
-            IconButton(onClick = onToggleFavorite) {
-                Icon(
-                    imageVector = if (member.isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
-                    contentDescription = "Toggle Favorite",
-                    tint = if (member.isFavorite) AccentAmber else TextSecondary
-                )
-            }
-        }
-
-        // Expandable Detail section
-        AnimatedVisibility(visible = expandedDetails) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 10.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xFF141722))
-                    .padding(10.dp)
-            ) {
-                Text(text = "Room ID: ${member.roomId}", color = TextSecondary, fontSize = 11.sp)
-                if (!member.slug.isNullOrBlank()) {
-                    Text(text = "Slug: ${member.slug}", color = TextSecondary, fontSize = 11.sp)
-                }
-                Text(text = "Platform: ${member.platform.uppercase()}", color = AccentCyan, fontSize = 11.sp)
-                if (member.streamingUrls.isNotEmpty()) {
-                    Text(
-                        text = "Streams: ${member.streamingUrls.size} stream endpoint(s) tersedia",
-                        color = AccentGreen,
-                        fontSize = 11.sp
+            // Action Buttons: Favorite and Chevron
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onToggleFavorite) {
+                    Icon(
+                        imageVector = if (member.isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                        contentDescription = "Toggle Favorite",
+                        tint = if (member.isFavorite) AccentAmber else TextSecondary
                     )
                 }
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = "Lihat Detail",
+                    tint = TextTertiary,
+                    modifier = Modifier.size(18.dp)
+                )
             }
         }
     }
@@ -528,3 +634,11 @@ private fun ApiKeyConfigDialog(
     )
 }
 
+private fun formatTime(timeMs: Long): String {
+    return try {
+        val sdf = SimpleDateFormat("HH:mm:ss 'WIB'", Locale.getDefault())
+        sdf.format(Date(timeMs))
+    } catch (_: Exception) {
+        "—"
+    }
+}

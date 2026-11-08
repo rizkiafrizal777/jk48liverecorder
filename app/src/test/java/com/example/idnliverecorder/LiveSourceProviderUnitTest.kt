@@ -1,3 +1,4 @@
+
 package com.example.idnliverecorder
 
 import com.example.idnliverecorder.data.DetectedLiveItem
@@ -48,7 +49,8 @@ class LiveSourceProviderUnitTest {
         assertFalse("Official stream is never claimed available without authorization", caps.isAvailableOnDevice)
         assertFalse("Direct stream does not require MediaProjection screen capture", caps.requiresMediaProjection)
         assertFalse("Direct stream has no screen UI elements", caps.recordsUiElements)
-        assertEquals("Official live stream integration is not available.", caps.availabilityNotice)
+        assertEquals("Direct Stream Integration", caps.displayName)
+        assertEquals("WAITING FOR AUTHORIZATION — Fitur direct stream belum diaktifkan karena masih menunggu persetujuan akses dan ketentuan penggunaan.", caps.availabilityNotice)
     }
 
     // --- Test 3: OfficialStreamProvider prepare() returns UNSUPPORTED_OFFICIAL_SOURCE ---

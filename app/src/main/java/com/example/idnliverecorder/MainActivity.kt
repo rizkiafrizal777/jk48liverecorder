@@ -108,6 +108,7 @@ class MainActivity : ComponentActivity() {
                         onRefreshJkt48 = { jkt48ViewModel.refresh() },
                         onToggleFavoriteJkt48 = { name -> jkt48ViewModel.toggleFavorite(name) },
                         onSaveJkt48ApiKey = { key -> jkt48ViewModel.saveApiKey(key) },
+                        onLoadDemoDataJkt48 = { jkt48ViewModel.loadDemoData() },
                         onStartRecordingClick = { checkPermissionsAndStart() },
                         onStopRecordingClick = { viewModel.stopRecording() },
                         onDismissStatus = { viewModel.dismissStatus() },

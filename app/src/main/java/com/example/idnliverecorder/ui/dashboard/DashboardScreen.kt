@@ -110,6 +110,7 @@ fun DashboardScreen(
     onRefreshJkt48: () -> Unit,
     onToggleFavoriteJkt48: (String) -> Unit,
     onSaveJkt48ApiKey: (String) -> Unit,
+    onLoadDemoDataJkt48: () -> Unit = {},
     onStartRecordingClick: () -> Unit,
     onStopRecordingClick: () -> Unit,
     onDismissStatus: () -> Unit,
@@ -331,6 +332,7 @@ fun DashboardScreen(
                     onRefresh = onRefreshJkt48,
                     onToggleFavorite = onToggleFavoriteJkt48,
                     onSaveApiKey = onSaveJkt48ApiKey,
+                    onLoadDemoData = onLoadDemoDataJkt48,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -391,7 +393,7 @@ private fun AppHeader(onRefresh: () -> Unit) {
             }
             Spacer(modifier = Modifier.height(3.dp))
             Text(
-                text = "Screen Recording & Live Detector • Phase 4",
+                text = "Screen Recording & Live Monitoring Engine • JKT48Connect Review",
                 color = TextTertiary,
                 fontSize = 12.sp
             )

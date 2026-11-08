@@ -157,12 +157,30 @@ private fun DetectionItemRow(
         Spacer(modifier = Modifier.width(12.dp))
 
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = item.streamerName,
-                color = TextPrimary,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = item.streamerName,
+                    color = TextPrimary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                if (item.isSimulation) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(AccentAmber.copy(alpha = 0.2f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "DEMO",
+                            color = AccentAmber,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = item.detectedAtMs.formatDate(),
@@ -171,7 +189,7 @@ private fun DetectionItemRow(
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = "Keyword: \"${item.matchedKeyword}\"",
+                text = if (item.isSimulation) "Sumber: Tes Simulasi Internal" else "Keyword: \"${item.matchedKeyword}\"",
                 color = TextSecondary,
                 fontSize = 11.sp
             )

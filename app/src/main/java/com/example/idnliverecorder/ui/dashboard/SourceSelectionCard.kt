@@ -206,6 +206,11 @@ private fun SourceOptionItem(
                         )
                     }
                 } else {
+                    val statusLabel = if (source.type == LiveSourceType.OfficialLiveStream) {
+                        "WAITING FOR AUTHORIZATION"
+                    } else {
+                        "UNAVAILABLE"
+                    }
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
@@ -214,7 +219,7 @@ private fun SourceOptionItem(
                             .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
                         Text(
-                            text = "UNAVAILABLE",
+                            text = statusLabel,
                             color = AccentAmber,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold

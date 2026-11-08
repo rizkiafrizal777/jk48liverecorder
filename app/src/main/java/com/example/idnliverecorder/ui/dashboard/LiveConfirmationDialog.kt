@@ -81,17 +81,28 @@ fun LiveConfirmationDialog(
                 Spacer(modifier = Modifier.width(12.dp))
 
                 Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "IDN Live Terdeteksi!",
+                        text = if (item.isSimulation) "IDN Live Terdeteksi (SIMULASI)" else "IDN Live Terdeteksi!",
                         color = TextPrimary,
-                        fontSize = 18.sp,
+                        fontSize = 17.sp,
                         fontWeight = FontWeight.Bold
                     )
+                }
+                if (item.isSimulation) {
+                    Text(
+                        text = "Data simulasi pengujian internal",
+                        color = com.example.idnliverecorder.ui.theme.AccentAmber,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                } else {
                     Text(
                         text = item.detectedAtMs.formatDate(),
                         color = TextTertiary,
                         fontSize = 12.sp
                     )
+                }
                 }
             }
 
