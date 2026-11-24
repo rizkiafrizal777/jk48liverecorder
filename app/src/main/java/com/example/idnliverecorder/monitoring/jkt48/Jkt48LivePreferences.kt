@@ -2,25 +2,35 @@ package com.example.idnliverecorder.monitoring.jkt48
 
 import android.content.Context
 import android.content.SharedPreferences
-import com.example.idnliverecorder.BuildConfig
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
 import com.example.idnliverecorder.monitoring.jkt48.api.Jkt48ConnectApiClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import android.util.Base64
+import java.nio.ByteBuffer
+import java.security.KeyStore
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
 
 /**
  * Manages configuration for JKT48 Live Monitor.
  *
  * Security Notice:
- * Keys are stored locally on device and are never sent to external third parties
- * or logged to Logcat. Prototype warning: Keys stored on client devices can be
- * extracted through APK decompilation; do not use production keys in distributed APKs.
+ * Keys are encrypted at rest using an Android Keystore AES-GCM key. The API key is
+ * still present in app memory and in the HTTPS request, so client-side storage cannot
+ * make a credential safe to embed as a shared production secret in a distributed APK.
  */
 class Jkt48LivePreferences(context: Context) {
 
     companion object {
         private const val PREFS_NAME = "jkt48_live_monitor_prefs"
         private const val KEY_API_KEY = "jkt48_api_key"
+        private const val KEY_API_KEY_ENCRYPTED = "jkt48_api_key_encrypted"
+        private const val API_KEY_ALIAS = "jkt48_connect_api_key"
         private const val KEY_BASE_URL = "jkt48_base_url"
         private const val KEY_NOTIFY_FAVORITES = "notify_favorites_live"
         private const val KEY_NOTIFIED_SESSIONS = "notified_live_session_ids"
@@ -39,12 +49,30 @@ class Jkt48LivePreferences(context: Context) {
     val notifyFavorites: StateFlow<Boolean> = _notifyFavorites.asStateFlow()
 
     private fun loadApiKey(): String {
+        val encrypted = prefs.getString(KEY_API_KEY_ENCRYPTED, null)
+        if (!encrypted.isNullOrBlank()) {
+            return try {
+                decryptApiKey(encrypted)
+            } catch (_: Exception) {
+                prefs.edit().remove(KEY_API_KEY_ENCRYPTED).apply()
+                ""
+            }
+        }
+
         val stored = prefs.getString(KEY_API_KEY, null)
-        return if (!stored.isNullOrBlank()) {
+        if (stored.isNullOrBlank()) return ""
+
+        // Migrate existing plaintext preference to device-bound encryption.
+        return try {
+            prefs.edit()
+                .putString(KEY_API_KEY_ENCRYPTED, encryptApiKey(stored))
+                .remove(KEY_API_KEY)
+                .apply()
             stored
-        } else {
-            // Fallback to BuildConfig if provided in local.properties
-            BuildConfig.JKT48_CONNECT_API_KEY.ifBlank { "" }
+        } catch (_: Exception) {
+            // Do not leave the legacy plaintext secret on disk if the keystore fails.
+            prefs.edit().remove(KEY_API_KEY).apply()
+            ""
         }
     }
 
@@ -53,10 +81,67 @@ class Jkt48LivePreferences(context: Context) {
         return stored?.takeIf { it.isNotBlank() } ?: Jkt48ConnectApiClient.DEFAULT_BASE_URL
     }
 
-    fun setApiKey(newKey: String) {
+    fun setApiKey(newKey: String): Boolean {
         val trimmed = newKey.trim()
-        prefs.edit().putString(KEY_API_KEY, trimmed).apply()
-        _apiKey.value = trimmed
+        return try {
+            if (trimmed.isBlank()) {
+                prefs.edit()
+                    .remove(KEY_API_KEY_ENCRYPTED)
+                    .remove(KEY_API_KEY)
+                    .apply()
+            } else {
+                prefs.edit()
+                    .putString(KEY_API_KEY_ENCRYPTED, encryptApiKey(trimmed))
+                    .remove(KEY_API_KEY)
+                    .apply()
+            }
+            _apiKey.value = trimmed
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun encryptApiKey(value: String): String {
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, getOrCreateEncryptionKey())
+        val encrypted = cipher.doFinal(value.toByteArray(Charsets.UTF_8))
+        val combined = ByteBuffer.allocate(cipher.iv.size + encrypted.size)
+            .put(cipher.iv)
+            .put(encrypted)
+            .array()
+        return Base64.encodeToString(combined, Base64.NO_WRAP)
+    }
+
+    private fun decryptApiKey(value: String): String {
+        val combined = Base64.decode(value, Base64.NO_WRAP)
+        val buffer = ByteBuffer.wrap(combined)
+        val iv = ByteArray(12)
+        require(buffer.remaining() > iv.size) { "Encrypted API key is invalid." }
+        buffer.get(iv)
+        val encrypted = ByteArray(buffer.remaining())
+        buffer.get(encrypted)
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.DECRYPT_MODE, getOrCreateEncryptionKey(), GCMParameterSpec(128, iv))
+        return cipher.doFinal(encrypted).toString(Charsets.UTF_8)
+    }
+
+    private fun getOrCreateEncryptionKey(): SecretKey {
+        val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        (keyStore.getKey(API_KEY_ALIAS, null) as? SecretKey)?.let { return it }
+
+        val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
+        generator.init(
+            KeyGenParameterSpec.Builder(
+                API_KEY_ALIAS,
+                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+            )
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setRandomizedEncryptionRequired(true)
+                .build()
+        )
+        return generator.generateKey()
     }
 
     fun setBaseUrl(newUrl: String) {

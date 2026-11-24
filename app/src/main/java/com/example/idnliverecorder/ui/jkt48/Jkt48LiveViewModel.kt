@@ -12,12 +12,17 @@ import com.example.idnliverecorder.monitoring.jkt48.Jkt48LivePreferences
 import com.example.idnliverecorder.recording.direct.DirectRecordingService
 import com.example.idnliverecorder.recording.direct.DirectStreamStatus
 import com.example.idnliverecorder.recording.validation.StreamSourceValidator
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.io.IOException
 
 class Jkt48LiveViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -41,6 +46,7 @@ class Jkt48LiveViewModel(application: Application) : AndroidViewModel(applicatio
     val directRecordingStatus: StateFlow<DirectStreamStatus> = DirectRecordingService.engineStatus
     val directRecordingDurationMs: StateFlow<Long> = DirectRecordingService.recordingDurationMs
     val activeRecordingMember: StateFlow<String?> = DirectRecordingService.currentMemberName
+    private var fetchJob: Job? = null
 
     fun startDirectRecording(member: Jkt48LiveMember) {
         val streamUrl = member.streamingUrls.firstOrNull() ?: ""
@@ -49,7 +55,6 @@ class Jkt48LiveViewModel(application: Application) : AndroidViewModel(applicatio
             action = DirectRecordingService.ACTION_START_DIRECT
             putExtra(DirectRecordingService.EXTRA_STREAM_URL, streamUrl)
             putExtra(DirectRecordingService.EXTRA_MEMBER_NAME, member.memberName)
-            putExtra(DirectRecordingService.EXTRA_IS_AUTHORIZED, true)
         }
         ContextCompat.startForegroundService(getApplication(), intent)
     }
@@ -63,7 +68,7 @@ class Jkt48LiveViewModel(application: Application) : AndroidViewModel(applicatio
 
     suspend fun validateMemberStream(member: Jkt48LiveMember): StreamSourceValidator.ValidationResult {
         val url = member.streamingUrls.firstOrNull()
-        return validator.validate(url = url, isRecordingAuthorized = true)
+        return validator.validate(url = url)
     }
 
     init {
@@ -85,10 +90,25 @@ class Jkt48LiveViewModel(application: Application) : AndroidViewModel(applicatio
             return
         }
 
-        _uiState.value = Jkt48LiveUiState.Loading
+        val previousState = _uiState.value
+        if (previousState is Jkt48LiveUiState.Success) {
+            _uiState.value = previousState.copy(isRefreshing = true, refreshError = null)
+        } else {
+            _uiState.value = Jkt48LiveUiState.Loading
+        }
 
-        viewModelScope.launch {
-            val result = repository.fetchIdnLiveStreams(apiKey = currentKey)
+        fetchJob?.cancel()
+        fetchJob = viewModelScope.launch {
+            var result = repository.fetchIdnLiveStreams(apiKey = currentKey)
+            var attempt = 1
+            while (result.isFailure && attempt < MAX_FETCH_ATTEMPTS) {
+                val error = result.exceptionOrNull() ?: break
+                if (!error.isTransientNetworkFailure()) break
+                delay(1000L * (1 shl (attempt - 1)))
+                if (!isActive) throw CancellationException("Live refresh superseded")
+                attempt++
+                result = repository.fetchIdnLiveStreams(apiKey = currentKey)
+            }
             result.onSuccess { members ->
                 if (members.isEmpty()) {
                     _uiState.value = Jkt48LiveUiState.Empty(
@@ -102,13 +122,27 @@ class Jkt48LiveViewModel(application: Application) : AndroidViewModel(applicatio
                     )
                 }
             }.onFailure { error ->
-                _uiState.value = Jkt48LiveUiState.Error(
-                    errorMessage = error.message ?: "Gagal terhubung ke JKT48Connect.",
-                    isApiKeyMissing = false,
-                    canRetry = true
-                )
+                val message = error.message ?: "Gagal terhubung ke JKT48Connect."
+                val currentState = _uiState.value
+                _uiState.value = if (currentState is Jkt48LiveUiState.Success) {
+                    currentState.copy(isRefreshing = false, refreshError = message)
+                } else {
+                    Jkt48LiveUiState.Error(
+                        errorMessage = message,
+                        isApiKeyMissing = false,
+                        canRetry = true
+                    )
+                }
             }
         }
+    }
+
+    private fun Throwable.isTransientNetworkFailure(): Boolean =
+        this is IOException ||
+            message.orEmpty().contains(Regex("HTTP (429|5[0-9]{2})"))
+
+    companion object {
+        private const val MAX_FETCH_ATTEMPTS = 3
     }
 
     fun toggleFavorite(memberName: String) {
@@ -128,8 +162,15 @@ class Jkt48LiveViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun saveApiKey(newKey: String) {
-        preferences.setApiKey(newKey)
-        refresh()
+        if (preferences.setApiKey(newKey)) {
+            refresh()
+        } else {
+            _uiState.value = Jkt48LiveUiState.Error(
+                errorMessage = "API Key tidak dapat disimpan dengan aman di perangkat ini.",
+                isApiKeyMissing = true,
+                canRetry = false
+            )
+        }
     }
 
     fun setNotifyFavorites(enabled: Boolean) {

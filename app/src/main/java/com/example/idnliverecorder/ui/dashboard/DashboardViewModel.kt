@@ -6,51 +6,22 @@ import android.content.pm.PackageManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.idnliverecorder.data.AppInfo
-import com.example.idnliverecorder.data.DetectedLiveItem
-import com.example.idnliverecorder.data.RecordedVideoItem
 import com.example.idnliverecorder.monitoring.LiveDetectionManager
-import com.example.idnliverecorder.monitoring.LiveDetectionRepository
 import com.example.idnliverecorder.monitoring.LiveDetectionSettings
 import com.example.idnliverecorder.monitoring.LiveDetectionSettingsData
-import com.example.idnliverecorder.recording.EncoderValidator
-import com.example.idnliverecorder.recording.RecordingConfig
-import com.example.idnliverecorder.recording.RecordingEventBridge
-import com.example.idnliverecorder.recording.direct.DirectRecordingService
-import com.example.idnliverecorder.recording.direct.DirectStreamStatus
-import com.example.idnliverecorder.storage.MediaStoreRecorderStorage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class DashboardViewModel(application: Application) : AndroidViewModel(application) {
 
     private val detectionManager = LiveDetectionManager.getInstance(application)
     private val detectionSettings = LiveDetectionSettings.getInstance(application)
-    private val detectionRepository = LiveDetectionRepository.getInstance(application)
-
-    private val _recentRecordings = MutableStateFlow<List<RecordedVideoItem>>(emptyList())
-    val recentRecordings: StateFlow<List<RecordedVideoItem>> = _recentRecordings.asStateFlow()
-
-    private val _optimalConfig = MutableStateFlow<RecordingConfig?>(null)
-    val optimalConfig: StateFlow<RecordingConfig?> = _optimalConfig.asStateFlow()
-
     // Phase 2 Detection States
     val settingsFlow: StateFlow<LiveDetectionSettingsData> = detectionSettings.settingsFlow
     val isNotificationAccessGranted: StateFlow<Boolean> = detectionManager.isPermissionGranted
-    val recentDetections: StateFlow<List<DetectedLiveItem>> = detectionRepository.recentDetections
-    val todayDetectionCount: StateFlow<Int> = detectionRepository.todayDetectionCount
-
-    val isLiveDetectionActive: StateFlow<Boolean> = combine(
-        settingsFlow,
-        isNotificationAccessGranted
-    ) { settings, permissionGranted ->
-        settings.isEnabled && !settings.targetPackageName.isNullOrBlank() && permissionGranted
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     private val _installedApps = MutableStateFlow<List<AppInfo>>(emptyList())
     val installedApps: StateFlow<List<AppInfo>> = _installedApps.asStateFlow()
@@ -59,38 +30,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     val isLoadingApps: StateFlow<Boolean> = _isLoadingApps.asStateFlow()
 
     init {
-        loadEngineConfig()
-        refreshRecordings()
         refreshPermissions()
-
-        // Auto-refresh recordings when direct stream recording completes (Phase 7-8 Reliability)
-        viewModelScope.launch {
-            RecordingEventBridge.recordingCompletedEvents.collect { event ->
-                refreshRecordings()
-            }
-        }
-
-        viewModelScope.launch {
-            DirectRecordingService.engineStatus.collect { status ->
-                if (status == DirectStreamStatus.COMPLETED) {
-                    refreshRecordings()
-                }
-            }
-        }
-    }
-
-    private fun loadEngineConfig() {
-        viewModelScope.launch(Dispatchers.Default) {
-            val result = EncoderValidator.resolveOptimalConfig(getApplication())
-            _optimalConfig.value = result.config
-        }
-    }
-
-    fun refreshRecordings() {
-        viewModelScope.launch(Dispatchers.IO) {
-            val list = MediaStoreRecorderStorage.fetchRecentRecordings(getApplication())
-            _recentRecordings.value = list
-        }
     }
 
     // Detection & Settings Controls (Phase 2)

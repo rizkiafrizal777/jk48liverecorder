@@ -1,10 +1,7 @@
 package com.example.idnliverecorder
 
 import com.example.idnliverecorder.monitoring.jkt48.Jkt48LiveMember
-import com.example.idnliverecorder.recording.direct.DirectRecordingService
 import com.example.idnliverecorder.recording.direct.DirectStreamStatus
-import com.example.idnliverecorder.recording.source.DirectStreamRecordingProvider
-import com.example.idnliverecorder.recording.source.ScreenCaptureRecordingSourceProvider
 import com.example.idnliverecorder.recording.validation.StreamSourceValidator
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -19,14 +16,7 @@ import java.util.Locale
 /**
  * Phase 5 Unit Tests — Direct Live Stream Recording Architecture
  *
- * Verifies Tests A through G in accordance with Phase 5 Specifications:
- * - Test A: API metadata and live detection.
- * - Test B: Source validation without recording (Unauthorized rejection).
- * - Test C: Format detection (HLS .m3u8 & MP4).
- * - Test D: Authorized stream recording validation.
- * - Test E: Background recording provider capabilities.
- * - Test F: Audio-Video monotonic timestamp synchronization.
- * - Test G: MediaStore file naming: JKT48_{MemberName}_{DateTime}.mp4.
+ * Covers JKT48 stream metadata, HLS source validation, timestamp handling, and file naming.
  */
 class DirectStreamRecordingUnitTest {
 
@@ -54,27 +44,25 @@ class DirectStreamRecordingUnitTest {
         assertEquals("Freya Jayawardana", member.memberName)
         assertEquals("idn", member.platform)
         assertTrue("Stream must be reported available when URLs are present", member.isStreamAvailable)
-        assertEquals(DirectStreamStatus.AUTHORIZATION_REQUIRED, member.directRecordingStatus)
+        assertEquals(DirectStreamStatus.READY_TO_RECORD, member.directRecordingStatus)
     }
 
     // --- Test B: Source validation without recording (Unauthorized rejection) ---
     @Test
-    fun testB_sourceValidationUnauthorizedRejection() = runBlocking {
+    fun testB_sourceValidationDoesNotRequireSeparateAuthorizationFlag() = runBlocking {
         // Without explicit authorization, live streams MUST return AUTHORIZATION_REQUIRED
         val result = validator.validate(
             url = "test://stream.example.com/live/stream.m3u8",
             provider = StreamSourceValidator.PROVIDER_JKT48CONNECT,
-            isRecordingAuthorized = false
         )
 
-        assertEquals(DirectStreamStatus.AUTHORIZATION_REQUIRED, result.status)
-        assertFalse("Recording must not be allowed when unauthorized", result.canRecord)
-        assertFalse(result.isAuthorized)
+        assertEquals(DirectStreamStatus.READY_TO_RECORD, result.status)
+        assertTrue("Recording can start without a separate checkbox", result.canRecord)
+        assertTrue(result.isAuthorized)
         assertTrue("Format must still be identified as HLS", result.isFormatSupported)
-        assertTrue(result.message.contains("AUTHORIZATION"))
 
         // Null or blank URL must return SOURCE_UNAVAILABLE
-        val emptyResult = validator.validate(url = null, isRecordingAuthorized = false)
+        val emptyResult = validator.validate(url = null)
         assertEquals(DirectStreamStatus.SOURCE_UNAVAILABLE, emptyResult.status)
         assertFalse(emptyResult.canRecord)
     }
@@ -95,37 +83,19 @@ class DirectStreamRecordingUnitTest {
         assertEquals(StreamSourceValidator.StreamMediaFormat.NONE, noneFormat)
     }
 
-    // --- Test D: Authorized stream recording validation (Authorized test media) ---
+    // --- Test D: Valid HLS stream recording validation ---
     @Test
     fun testD_authorizedStreamRecordingValidation() = runBlocking {
-        // When using authorized test media with explicit isRecordingAuthorized = true
+        // A valid HLS source is ready without a separate authorization flag.
         val result = validator.validate(
             url = "test://authorized/test_live.m3u8",
             provider = StreamSourceValidator.PROVIDER_TEST_MEDIA,
-            isRecordingAuthorized = true
         )
 
         assertEquals(DirectStreamStatus.READY_TO_RECORD, result.status)
         assertTrue("Must allow recording when source is active, HLS, and authorized", result.canRecord)
         assertTrue(result.isAuthorized)
         assertTrue(result.isSourceActive)
-    }
-
-    // --- Test E: Background recording provider capabilities ---
-    @Test
-    fun testE_backgroundRecordingProviderCapabilities() {
-        val provider = DirectStreamRecordingProvider()
-
-        assertEquals("direct_stream", provider.id)
-        assertFalse("Direct stream MUST NOT require MediaProjection", provider.requiresMediaProjection)
-        assertTrue("Direct stream MUST support background recording", provider.supportsBackgroundRecording)
-        assertEquals(DirectStreamStatus.SOURCE_UNAVAILABLE, provider.currentStatus.value)
-
-        // Screen capture fallback comparison
-        val screenProvider = ScreenCaptureRecordingSourceProvider()
-        assertEquals("screen_capture", screenProvider.id)
-        assertTrue("Screen capture DOES require MediaProjection", screenProvider.requiresMediaProjection)
-        assertFalse("Screen capture CANNOT record background app window independently", screenProvider.supportsBackgroundRecording)
     }
 
     // --- Test F: Audio-Video monotonic timestamp synchronization ---

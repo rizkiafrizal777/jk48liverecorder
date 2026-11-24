@@ -11,7 +11,9 @@ sealed interface Jkt48LiveUiState {
 
     data class Success(
         val members: List<Jkt48LiveMember>,
-        val lastUpdatedMs: Long = System.currentTimeMillis()
+        val lastUpdatedMs: Long = System.currentTimeMillis(),
+        val isRefreshing: Boolean = false,
+        val refreshError: String? = null
     ) : Jkt48LiveUiState
 
     data class Empty(

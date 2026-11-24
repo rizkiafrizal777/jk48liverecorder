@@ -23,6 +23,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.nio.ByteBuffer
 import java.util.Collections
 import java.util.Locale
@@ -45,10 +46,10 @@ class DirectStreamRecordingEngine(
     private val context: Context,
     private val streamUrl: String,
     private val memberName: String,
-    private val isRecordingAuthorized: Boolean = true,
     private val httpClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
+        .callTimeout(30, TimeUnit.SECONDS)
         .build(),
     private val onStatusChanged: (DirectStreamStatus, String) -> Unit = { _, _ -> }
 ) {
@@ -62,6 +63,8 @@ class DirectStreamRecordingEngine(
         private const val TAG_MUXER = "IDN_HLS_MUXER"
         private const val TAG_FINALIZE = "IDN_HLS_FINALIZE"
         private const val BUFFER_SIZE = 1024 * 1024 // 1MB buffer for demuxing
+        private const val MAX_TRACKED_SEGMENTS = 4096
+        private const val MAX_SEGMENT_BYTES = 128L * 1024L * 1024L
 
         fun getFirstBytesHex(file: File, count: Int = 16): String {
             return try {
@@ -106,6 +109,7 @@ class DirectStreamRecordingEngine(
         val displayName: String = "",
         val sizeBytes: Long = 0L,
         val durationMs: Long = 0L,
+        val warningMessage: String? = null,
         val errorMessage: String? = null
     )
 
@@ -116,6 +120,7 @@ class DirectStreamRecordingEngine(
     private val isStopping = AtomicBoolean(false)
     private val isFinalized = AtomicBoolean(false)
     private var finalizationSummary: FinalizationSummary? = null
+    private var pipelineWarning: String? = null
 
     private var outputSession: MediaStoreRecorderStorage.OutputSession? = null
     private var mediaMuxer: MediaMuxer? = null
@@ -135,10 +140,16 @@ class DirectStreamRecordingEngine(
     private var lastRawVideoPtsInSegment = -1L
     private var lastRawAudioPtsInSegment = -1L
 
-    private val processedSegments = Collections.synchronizedSet(mutableSetOf<String>())
-    private val pendingSegmentsBeforeStart = Collections.synchronizedList(mutableListOf<HlsSegmentDetector.DownloadedSegment>())
+    private val processedSegments = Collections.synchronizedSet(LinkedHashSet<String>())
+    private data class PendingSegment(
+        val downloaded: HlsSegmentDetector.DownloadedSegment,
+        val initSegmentFile: File?
+    )
+
+    private val pendingSegmentsBeforeStart = Collections.synchronizedList(mutableListOf<PendingSegment>())
     private val cacheDir = File(context.cacheDir, "hls_direct_recording_${System.currentTimeMillis()}")
     private var cachedInitSegmentFile: File? = null
+    private var cachedAudioInitSegmentFile: File? = null
     private var audioPlaylistUrl: String? = null
     private var downloadCounter = 0
 
@@ -164,6 +175,7 @@ class DirectStreamRecordingEngine(
         isStopping.set(false)
         isFinalized.set(false)
         finalizationSummary = null
+        pipelineWarning = null
         totalVideoSamplesWritten = 0L
         totalAudioSamplesWritten = 0L
         baseSessionPtsUs = -1L
@@ -179,6 +191,8 @@ class DirectStreamRecordingEngine(
         isMuxerStarted = false
         processedSegments.clear()
         pendingSegmentsBeforeStart.clear()
+        cachedInitSegmentFile = null
+        cachedAudioInitSegmentFile = null
         audioPlaylistUrl = null
         downloadCounter = 0
         cacheDir.mkdirs()
@@ -253,6 +267,7 @@ class DirectStreamRecordingEngine(
             }
 
             var consecutiveFailures = 0
+            var consecutiveSegmentFailures = 0
             var liveVideoWindowInitialized = false
             var liveAudioWindowInitialized = false
 
@@ -268,6 +283,7 @@ class DirectStreamRecordingEngine(
                     )
                     if (consecutiveFailures >= 5) {
                         Log.e(TAG_PLAYLIST, "[$sessionId] Exceeded maximum playlist fetch retries. Finalizing recording.")
+                        pipelineWarning = "Koneksi siaran terputus berulang kali; file mungkin berisi rekaman sebagian."
                         break
                     }
                     delay(2000)
@@ -290,7 +306,7 @@ class DirectStreamRecordingEngine(
                 // newest complete segment instead of writing that historical window.
                 if (!liveVideoWindowInitialized && !resolvedPlaylist.isEndList && resolvedPlaylist.segments.isNotEmpty()) {
                     val staleSegments = resolvedPlaylist.segments.dropLast(1)
-                    processedSegments.addAll(staleSegments.map { it.url })
+                    staleSegments.forEach { markSegmentProcessed(it.url) }
                     liveVideoWindowInitialized = true
                     Log.i(
                         TAG_PLAYLIST,
@@ -335,9 +351,11 @@ class DirectStreamRecordingEngine(
                         if (shouldDelete) {
                             downloaded.file.delete()
                         }
-                        processedSegments.add(segment.url)
+                        markSegmentProcessed(segment.url)
                         newSegmentsCount++
+                        consecutiveSegmentFailures = 0
                     } else {
+                        consecutiveSegmentFailures++
                         Log.w(
                             TAG_DOWNLOAD,
                             "[$sessionId] Segment download failed for URL=${HlsPlaylistResolver.sanitizeUrl(segment.url)}. Skipping sample extraction for this segment."
@@ -354,7 +372,7 @@ class DirectStreamRecordingEngine(
 
                         if (!liveAudioWindowInitialized && !audioPlaylist.isEndList && audioPlaylist.segments.isNotEmpty()) {
                             val staleAudioSegments = audioPlaylist.segments.dropLast(1)
-                            processedSegments.addAll(staleAudioSegments.map { it.url })
+                            staleAudioSegments.forEach { markSegmentProcessed(it.url) }
                             liveAudioWindowInitialized = true
                             Log.i(
                                 TAG_PLAYLIST,
@@ -364,9 +382,11 @@ class DirectStreamRecordingEngine(
                         }
 
                         // Audio init segment if present
-                        if (audioPlaylist.initSegmentUrl != null && cachedInitSegmentFile == null) {
+                        if (audioPlaylist.initSegmentUrl != null &&
+                            (cachedAudioInitSegmentFile == null || !cachedAudioInitSegmentFile!!.exists())
+                        ) {
                             val audioInit = downloadSegment(audioPlaylist.initSegmentUrl, isInit = true)
-                            cachedInitSegmentFile = audioInit?.file
+                            cachedAudioInitSegmentFile = audioInit?.file
                         }
 
                         for (segment in audioPlaylist.segments) {
@@ -375,13 +395,15 @@ class DirectStreamRecordingEngine(
 
                             val audioDownloaded = downloadSegment(segment.url, isInit = false)
                             if (audioDownloaded != null) {
-                                val shouldDelete = muxSegment(audioDownloaded)
+                                val shouldDelete = muxSegment(audioDownloaded, cachedAudioInitSegmentFile)
                                 if (shouldDelete) {
                                     audioDownloaded.file.delete()
                                 }
-                                processedSegments.add(segment.url)
+                                markSegmentProcessed(segment.url)
                                 newSegmentsCount++
+                                consecutiveSegmentFailures = 0
                             } else {
+                                consecutiveSegmentFailures++
                                 Log.w(
                                     TAG_DOWNLOAD,
                                     "[$sessionId] Audio segment download failed for URL=${HlsPlaylistResolver.sanitizeUrl(segment.url)}. Skipping sample extraction for this audio segment."
@@ -397,6 +419,12 @@ class DirectStreamRecordingEngine(
                         "[$sessionId] Processed $newSegmentsCount segment(s). Total samples: " +
                             "video=$totalVideoSamplesWritten, audio=$totalAudioSamplesWritten"
                     )
+                }
+
+                if (consecutiveSegmentFailures >= 10) {
+                    pipelineWarning = "Segmen siaran gagal diunduh berulang kali; file mungkin berisi rekaman sebagian."
+                    Log.e(TAG_DOWNLOAD, "[$sessionId] Too many consecutive HLS segment download failures.")
+                    break
                 }
 
                 // Check for stream completion tag (#EXT-X-ENDLIST)
@@ -426,7 +454,7 @@ class DirectStreamRecordingEngine(
      * Downloads an HLS segment to an isolated temporary cache file and inspects metadata.
      * Uses short, deterministic, unique filenames to prevent ENAMETOOLONG errors.
      */
-    private fun downloadSegment(segmentUrl: String, isInit: Boolean = false): HlsSegmentDetector.DownloadedSegment? {
+    private suspend fun downloadSegment(segmentUrl: String, isInit: Boolean = false): HlsSegmentDetector.DownloadedSegment? {
         val segmentIndex = ++downloadCounter
         val fileName = generateLocalFileName(segmentIndex, segmentUrl, isInit)
         val targetFile = File(cacheDir, fileName)
@@ -452,12 +480,31 @@ class DirectStreamRecordingEngine(
                             TAG_DOWNLOAD,
                             "Segment download #$segmentIndex failed: HTTP $statusCode, URL=${HlsPlaylistResolver.sanitizeUrl(segmentUrl)}"
                         )
+                        if (statusCode == 408 || statusCode == 429 || statusCode in 500..599) {
+                            throw IOException("Transient HLS segment response: HTTP $statusCode")
+                        }
                         return null
                     }
 
-                    response.body?.byteStream()?.use { input ->
+                    val body = response.body ?: return null
+                    if (body.contentLength() > MAX_SEGMENT_BYTES) {
+                        Log.e(TAG_DOWNLOAD, "Segment #$segmentIndex exceeded the configured size limit.")
+                        return null
+                    }
+
+                    body.byteStream().use { input ->
                         FileOutputStream(targetFile).use { output ->
-                            input.copyTo(output)
+                            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                            var bytesRead = 0L
+                            while (true) {
+                                val count = input.read(buffer)
+                                if (count < 0) break
+                                bytesRead += count
+                                if (bytesRead > MAX_SEGMENT_BYTES) {
+                                    throw IOException("HLS segment exceeded the configured size limit.")
+                                }
+                                output.write(buffer, 0, count)
+                            }
                         }
                     }
 
@@ -495,14 +542,28 @@ class DirectStreamRecordingEngine(
                 if (targetFile.exists()) {
                     targetFile.delete()
                 }
+                if (e is CancellationException) throw e
                 Log.e(
                     TAG_DOWNLOAD,
                     "Segment #$segmentIndex download attempt $attempt failed for ${HlsPlaylistResolver.sanitizeUrl(segmentUrl)}: ${e.message}",
                     e
                 )
+                if (attempt < 3) delay(250L * attempt)
             }
         }
         return null
+    }
+
+    private fun markSegmentProcessed(segmentUrl: String) {
+        synchronized(processedSegments) {
+            processedSegments.add(segmentUrl)
+            while (processedSegments.size > MAX_TRACKED_SEGMENTS) {
+                val oldest = processedSegments.iterator()
+                if (!oldest.hasNext()) break
+                oldest.next()
+                oldest.remove()
+            }
+        }
     }
 
     /**
@@ -511,27 +572,30 @@ class DirectStreamRecordingEngine(
      * Returns true if the segment was processed or discarded (caller should delete file),
      * or false if the segment was retained in pendingSegmentsBeforeStart while awaiting muxer start.
      */
-    private fun muxSegment(downloaded: HlsSegmentDetector.DownloadedSegment): Boolean {
+    private fun muxSegment(
+        downloaded: HlsSegmentDetector.DownloadedSegment,
+        initSegmentFile: File? = cachedInitSegmentFile
+    ): Boolean {
         val segmentFile = downloaded.file
         val isFmp4 = downloaded.format == HlsSegmentDetector.SegmentFormat.FRAGMENTED_MP4 ||
-                     (cachedInitSegmentFile != null && cachedInitSegmentFile!!.exists() &&
+                     (initSegmentFile != null && initSegmentFile.exists() &&
                       (segmentFile.name.endsWith(".m4s") || segmentFile.name.endsWith(".mp4")))
 
         var fileToExtract = segmentFile
         var combinedFile: File? = null
 
-        if (isFmp4 && cachedInitSegmentFile != null && cachedInitSegmentFile!!.exists()) {
+        if (isFmp4 && initSegmentFile != null && initSegmentFile.exists()) {
             val combined = File(cacheDir, "combined_${segmentFile.nameWithoutExtension}.mp4")
             try {
                 FileOutputStream(combined).use { fos ->
-                    cachedInitSegmentFile!!.inputStream().use { it.copyTo(fos) }
+                    initSegmentFile.inputStream().use { it.copyTo(fos) }
                     segmentFile.inputStream().use { it.copyTo(fos) }
                 }
                 combinedFile = combined
                 fileToExtract = combined
                 Log.d(
                     TAG_DETECTOR,
-                    "Combined init segment (${cachedInitSegmentFile!!.length()}B) with media fragment (${segmentFile.length()}B) -> " +
+                    "Combined init segment (${initSegmentFile.length()}B) with media fragment (${segmentFile.length()}B) -> " +
                         "combinedFile=${combined.name}, combinedSize=${combined.length()}B"
                 )
             } catch (e: Exception) {
@@ -542,7 +606,7 @@ class DirectStreamRecordingEngine(
             Log.d(
                 TAG_DETECTOR,
                 "Segment processed without combination: isFmp4=$isFmp4, " +
-                    "hasInit=${cachedInitSegmentFile != null && cachedInitSegmentFile!!.exists()}, " +
+                    "hasInit=${initSegmentFile != null && initSegmentFile.exists()}, " +
                     "file=${segmentFile.name}, size=${segmentFile.length()}B, format=${downloaded.format}"
             )
         }
@@ -566,7 +630,7 @@ class DirectStreamRecordingEngine(
 
             // Stage 2 (Fix C): Robust MediaExtractor Fallback
             // If 0 tracks found on raw segment, and we have an init segment and haven't tried combining yet:
-            if (numTracks == 0 && combinedFile == null && cachedInitSegmentFile != null && cachedInitSegmentFile!!.exists()) {
+            if (numTracks == 0 && combinedFile == null && initSegmentFile != null && initSegmentFile.exists()) {
                 val magicFormat = HlsSegmentDetector.detectByMagicBytes(segmentFile)
                 if (magicFormat == HlsSegmentDetector.SegmentFormat.FRAGMENTED_MP4 || magicFormat == HlsSegmentDetector.SegmentFormat.UNKNOWN) {
                     Log.d(TAG_DETECTOR, "0 tracks on initial extraction. Attempting fallback combination with init segment...")
@@ -576,7 +640,7 @@ class DirectStreamRecordingEngine(
 
                     val fallbackCombined = File(cacheDir, "fallback_${segmentFile.nameWithoutExtension}.mp4")
                     FileOutputStream(fallbackCombined).use { fos ->
-                        cachedInitSegmentFile!!.inputStream().use { it.copyTo(fos) }
+                        initSegmentFile.inputStream().use { it.copyTo(fos) }
                         segmentFile.inputStream().use { it.copyTo(fos) }
                     }
                     combinedFile = fallbackCombined
@@ -676,7 +740,7 @@ class DirectStreamRecordingEngine(
 
             if (!isMuxerStarted) {
                 Log.w(TAG_MUXER, "Muxer not started yet (waiting for all tracks). Buffering segment ${downloaded.file.name}.")
-                pendingSegmentsBeforeStart.add(downloaded)
+                pendingSegmentsBeforeStart.add(PendingSegment(downloaded, initSegmentFile))
                 return false
             }
 
@@ -711,11 +775,11 @@ class DirectStreamRecordingEngine(
             copy
         }
         for (seg in pending) {
-            Log.d(TAG_MUXER, "Draining pre-start buffered segment: ${seg.file.name}")
+            Log.d(TAG_MUXER, "Draining pre-start buffered segment: ${seg.downloaded.file.name}")
             try {
-                muxSegment(seg)
+                muxSegment(seg.downloaded, seg.initSegmentFile)
             } finally {
-                seg.file.delete()
+                seg.downloaded.file.delete()
             }
         }
     }
@@ -955,7 +1019,7 @@ class DirectStreamRecordingEngine(
     /**
      * Fetches raw playlist text via OkHttp.
      */
-    private fun fetchPlaylistText(url: String): String? {
+    private suspend fun fetchPlaylistText(url: String): String? {
         // Special case for mock test streams during unit testing
         if (url.startsWith("test://") || url.startsWith("mock://")) {
             return """
@@ -968,19 +1032,26 @@ class DirectStreamRecordingEngine(
             """.trimIndent()
         }
 
-        return try {
-            val request = Request.Builder()
-                .url(url)
-                .header("User-Agent", "IDNLiveRecorder/1.0")
-                .build()
+        for (attempt in 1..3) {
+            try {
+                val request = Request.Builder()
+                    .url(url)
+                    .header("User-Agent", "IDNLiveRecorder/1.0")
+                    .build()
 
-            httpClient.newCall(request).execute().use { response ->
-                if (response.isSuccessful) response.body?.string() else null
+                httpClient.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) return response.body?.string()
+                    Log.w(TAG_PLAYLIST, "HLS playlist request failed with HTTP ${response.code}.")
+                    if (response.code != 408 && response.code != 429 && response.code !in 500..599) return null
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Error fetching HLS playlist (${HlsPlaylistResolver.sanitizeUrl(url)}): ${e.message}")
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error fetching HLS playlist (${HlsPlaylistResolver.sanitizeUrl(url)}): ${e.message}")
-            null
+            if (attempt < 3) delay(500L * attempt)
         }
+        return null
     }
 
     /**
@@ -1161,7 +1232,8 @@ class DirectStreamRecordingEngine(
                     uri = session.uri,
                     displayName = session.displayName,
                     sizeBytes = size,
-                    durationMs = duration
+                    durationMs = duration,
+                    warningMessage = pipelineWarning
                 )
                 finalizationSummary = summary
                 return summary
@@ -1213,7 +1285,7 @@ class DirectStreamRecordingEngine(
     private fun cleanupCache() {
         synchronized(pendingSegmentsBeforeStart) {
             pendingSegmentsBeforeStart.forEach {
-                try { it.file.delete() } catch (_: Exception) {}
+                try { it.downloaded.file.delete() } catch (_: Exception) {}
             }
             pendingSegmentsBeforeStart.clear()
         }

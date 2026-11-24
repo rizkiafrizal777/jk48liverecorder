@@ -3,9 +3,7 @@ package com.example.idnliverecorder.recording.direct
 /**
  * Status hierarchy for Phase 5 Direct Stream Recording.
  *
- * Enforces strict compliance:
- * - READY_TO_RECORD must NEVER be reached unless authorization is explicitly verified.
- * - Unauthorized sources remain locked at AUTHORIZATION_REQUIRED or SOURCE_UNAVAILABLE.
+ * AUTHORIZATION_REQUIRED represents a stream server response that denies access (HTTP 401/403).
  */
 enum class DirectStreamStatus(val label: String) {
     LIVE("LIVE"),

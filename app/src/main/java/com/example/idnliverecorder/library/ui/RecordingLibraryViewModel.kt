@@ -30,6 +30,7 @@ import com.example.idnliverecorder.recording.RecordingEventBridge
 import com.example.idnliverecorder.recording.direct.DirectRecordingService
 import com.example.idnliverecorder.recording.direct.DirectStreamStatus
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -195,6 +196,7 @@ class RecordingLibraryViewModel(application: Application) : AndroidViewModel(app
                         Log.d("RecordingLibraryVM", "refreshLibraryWithRetry: Expected $expectedDisplayName not yet present in MediaStore, waiting... (attempt ${attempt + 1}/$maxRetries)")
                     }
                 } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     Log.w("RecordingLibraryVM", "refreshLibraryWithRetry error on attempt ${attempt + 1}: ${e.message}")
                     if (attempt == maxRetries - 1) {
                         _errorMessage.value = "Gagal memuat daftar rekaman: ${e.message}"

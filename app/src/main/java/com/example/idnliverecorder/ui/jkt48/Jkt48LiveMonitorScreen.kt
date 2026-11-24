@@ -42,6 +42,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -435,6 +436,51 @@ fun Jkt48LiveMonitorScreen(
                         }
                     }
 
+                    if (uiState.isRefreshing) {
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(SurfaceVariantDark)
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CircularProgressIndicator(
+                                    color = AccentCyan,
+                                    strokeWidth = 2.dp,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(9.dp))
+                                Text("Memperbarui data live…", color = TextSecondary, fontSize = 12.sp)
+                            }
+                        }
+                    }
+
+                    uiState.refreshError?.let { message ->
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(DangerBg)
+                                    .padding(start = 12.dp, top = 10.dp, end = 4.dp, bottom = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "Pembaruan gagal. Menampilkan data terakhir. $message",
+                                    color = TextSecondary,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                TextButton(onClick = onRefresh) {
+                                    Text("Coba lagi", color = PrimaryRed, fontSize = 11.sp)
+                                }
+                            }
+                        }
+                    }
+
                     items(uiState.members, key = { it.sessionKey }) { member ->
                         val isRecordingThisMember = (directRecordingStatus == DirectStreamStatus.RECORDING &&
                                 activeRecordingMember == member.memberName)
@@ -690,7 +736,7 @@ private fun ApiKeyConfigDialog(
         text = {
             Column {
                 Text(
-                    text = "Dapatkan API key dari portal JKT48Connect (https://v3.jkt48connect.com).\nKey disimpan secara lokal di perangkat Anda.",
+                    text = "Dapatkan API key dari portal JKT48Connect (https://v3.jkt48connect.com). Key dienkripsi di penyimpanan lokal perangkat.",
                     color = TextSecondary,
                     fontSize = 12.sp
                 )
@@ -700,6 +746,7 @@ private fun ApiKeyConfigDialog(
                     onValueChange = { keyInput = it },
                     label = { Text("API Key") },
                     singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = PrimaryRed,
                         unfocusedBorderColor = CardBorder,

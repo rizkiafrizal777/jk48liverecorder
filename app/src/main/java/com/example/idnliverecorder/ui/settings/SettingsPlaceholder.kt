@@ -64,7 +64,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.idnliverecorder.monitoring.LiveDetectionSettingsData
-import com.example.idnliverecorder.recording.RecordingConfig
 import com.example.idnliverecorder.ui.theme.AccentAmber
 import com.example.idnliverecorder.ui.theme.AccentCyan
 import com.example.idnliverecorder.ui.theme.AccentGreen
@@ -81,7 +80,6 @@ import com.example.idnliverecorder.ui.theme.TextTertiary
 fun FullSettingsSection(
     isPermissionGranted: Boolean,
     settings: LiveDetectionSettingsData,
-    activeConfig: RecordingConfig?,
     onRefreshPermission: () -> Unit,
     onOpenAppPicker: () -> Unit,
     onSetDetectionEnabled: (Boolean) -> Unit,
@@ -520,10 +518,7 @@ fun FullSettingsSection(
             }
         }
 
-        // SECTION 3: Storage & Engine Specs (Phase 1 Preserved)
-        StorageAndConfigCard(activeConfig = activeConfig)
-
-        // SECTION 4: JKT48Connect Review & Integration Info
+        // SECTION 3: JKT48Connect Review & Integration Info
         Jkt48ConnectIntegrationCard()
     }
 }
@@ -537,65 +532,6 @@ private fun openNotificationListenerSettings(context: Context) {
             val fallback = Intent(Settings.ACTION_SETTINGS)
             context.startActivity(fallback)
         } catch (_: Exception) {}
-    }
-}
-
-@Composable
-fun StorageAndConfigCard(
-    activeConfig: RecordingConfig?,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(SurfaceDark)
-            .border(1.dp, CardBorder, RoundedCornerShape(16.dp))
-            .padding(18.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.Info,
-                contentDescription = null,
-                tint = AccentCyan,
-                modifier = Modifier.padding(end = 8.dp)
-            )
-            Text(
-                text = "Engine & Storage Specs",
-                color = TextPrimary,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        ConfigRow(
-            icon = Icons.Default.Videocam,
-            label = "Video Resolution",
-            value = activeConfig?.let { "${it.width}x${it.height} @ ${it.frameRate} FPS (H.264)" }
-                ?: "1080p @ 30 FPS (H.264 AVC)"
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        ConfigRow(
-            icon = Icons.Default.Folder,
-            label = "Storage Directory",
-            value = "Movies/IDNLiveRecorder (Scoped Storage)"
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        ConfigRow(
-            icon = Icons.AutoMirrored.Filled.VolumeUp,
-            label = "Audio Mode",
-            value = "Video Only • Internal Audio (Phase 3)",
-            valueColor = AccentAmber
-        )
     }
 }
 

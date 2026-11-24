@@ -8,6 +8,7 @@ import android.provider.MediaStore
 import android.util.Log
 import com.example.idnliverecorder.core.Constants
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 
 /**
@@ -123,6 +124,7 @@ class RecordingLibraryRepository(private val context: Context) {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error querying MediaStore recordings: ${e.message}", e)
+            throw e
         }
 
         // Apply in-memory search and date filtering

@@ -68,19 +68,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.idnliverecorder.core.formatDuration
 import com.example.idnliverecorder.core.formatFileSize
 import com.example.idnliverecorder.data.AppInfo
-import com.example.idnliverecorder.data.DetectedLiveItem
-import com.example.idnliverecorder.data.RecordedVideoItem
 import com.example.idnliverecorder.library.ui.RecordingLibraryScreen
 import com.example.idnliverecorder.library.ui.RecordingLibraryViewModel
 import com.example.idnliverecorder.monitoring.LiveDetectionSettingsData
 import com.example.idnliverecorder.monitoring.jkt48.Jkt48LiveMember
 import com.example.idnliverecorder.recording.direct.DirectStreamStatus
-import com.example.idnliverecorder.recording.source.LiveSourceCapabilities
-import com.example.idnliverecorder.recording.source.LiveSourceType
-import com.example.idnliverecorder.recording.AudioCaptureStatus
-import com.example.idnliverecorder.recording.RecordingConfig
-import com.example.idnliverecorder.recording.RecordingState
-import com.example.idnliverecorder.ui.history.HistoryPlaceholderSection
 import com.example.idnliverecorder.ui.jkt48.Jkt48LiveMonitorScreen
 import com.example.idnliverecorder.ui.jkt48.Jkt48LiveUiState
 import com.example.idnliverecorder.ui.settings.AppSelectionDialog
@@ -101,13 +93,8 @@ import com.example.idnliverecorder.ui.theme.TextTertiary
 
 @Composable
 fun DashboardScreen(
-    recentRecordings: List<RecordedVideoItem>,
-    optimalConfig: RecordingConfig?,
-    isLiveDetectionActive: Boolean,
     isPermissionGranted: Boolean,
     settings: LiveDetectionSettingsData,
-    recentDetections: List<DetectedLiveItem>,
-    todayCount: Int,
     installedApps: List<AppInfo>,
     isLoadingApps: Boolean,
     jkt48UiState: Jkt48LiveUiState,
@@ -123,7 +110,6 @@ fun DashboardScreen(
     libraryViewModel: RecordingLibraryViewModel? = null,
     selectedTab: Int = 0,
     onTabSelected: (Int) -> Unit = {},
-    onRefreshRecordings: () -> Unit,
     onRefreshPermission: () -> Unit,
     onOpenAppPicker: () -> Unit,
     onAppSelected: (AppInfo) -> Unit,
@@ -145,6 +131,8 @@ fun DashboardScreen(
     val libRecordings by (libraryViewModel?.rawRecordings?.collectAsStateWithLifecycle() ?: remember { mutableStateOf(emptyList()) })
     val libFavoriteIds by (libraryViewModel?.favoriteIds?.collectAsStateWithLifecycle() ?: remember { mutableStateOf(emptySet()) })
     val libRecentExports by (libraryViewModel?.recentExports?.collectAsStateWithLifecycle() ?: remember { mutableStateOf(emptyList()) })
+    val isLoadingLibrary by (libraryViewModel?.isLoading?.collectAsStateWithLifecycle() ?: remember { mutableStateOf(false) })
+    val libraryError by (libraryViewModel?.errorMessage?.collectAsStateWithLifecycle() ?: remember { mutableStateOf<String?>(null) })
 
     // App Picker Dialog
     if (showAppPickerDialog) {
@@ -173,7 +161,7 @@ fun DashboardScreen(
         ) {
             Spacer(modifier = Modifier.height(12.dp))
             AppHeader(onRefresh = {
-                onRefreshRecordings()
+                libraryViewModel?.refreshLibrary()
                 onRefreshPermission()
                 onRefreshJkt48()
             })
@@ -191,7 +179,10 @@ fun DashboardScreen(
                         recordings = libRecordings,
                         favoriteCount = libFavoriteIds.size,
                         recentExports = libRecentExports,
-                        onOpenLibrary = { onTabSelected(2) }
+                        onOpenLibrary = { onTabSelected(2) },
+                        isLoading = isLoadingLibrary,
+                        loadError = libraryError,
+                        onRetry = { libraryViewModel?.refreshLibrary() }
                     )
 
                     Spacer(modifier = Modifier.height(30.dp))
@@ -236,7 +227,6 @@ fun DashboardScreen(
                     FullSettingsSection(
                         isPermissionGranted = isPermissionGranted,
                         settings = settings,
-                        activeConfig = optimalConfig,
                         onRefreshPermission = onRefreshPermission,
                         onOpenAppPicker = {
                             onOpenAppPicker()

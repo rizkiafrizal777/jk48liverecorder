@@ -27,8 +27,10 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.Icon
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,6 +66,9 @@ fun DashboardAnalyticsSection(
     favoriteCount: Int,
     recentExports: List<ExportTask>,
     onOpenLibrary: () -> Unit,
+    isLoading: Boolean = false,
+    loadError: String? = null,
+    onRetry: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val totalRecordings = recordings.size
@@ -108,7 +113,7 @@ fun DashboardAnalyticsSection(
                         color = TextPrimary
                     )
                     Text(
-                        text = "Statistik MediaStore & Database Lokal",
+                        text = "Ringkasan koleksi rekaman lokal",
                         fontSize = 11.sp,
                         color = TextTertiary
                     )
@@ -139,6 +144,62 @@ fun DashboardAnalyticsSection(
         }
 
         Spacer(modifier = Modifier.height(14.dp))
+
+        if (isLoading && recordings.isEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(SurfaceVariantDark)
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                CircularProgressIndicator(
+                    color = AccentCyan,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text("Memuat ringkasan rekaman…", color = TextSecondary, fontSize = 12.sp)
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+        } else if (loadError != null && recordings.isEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(SurfaceVariantDark)
+                    .padding(start = 12.dp, top = 8.dp, end = 4.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Ringkasan gagal dimuat: $loadError",
+                    color = TextSecondary,
+                    fontSize = 11.sp,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = onRetry) {
+                    Text("Coba lagi", color = AccentCyan, fontSize = 11.sp)
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+        } else if (loadError != null) {
+            Text(
+                text = "Pembaruan gagal; menampilkan data rekaman terakhir.",
+                color = AccentAmber,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(bottom = 10.dp)
+            )
+        }
+
+        if (recordings.isEmpty() && !isLoading && loadError == null) {
+            Text(
+                text = "Belum ada rekaman. File yang berhasil disimpan akan muncul di sini.",
+                color = TextSecondary,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
+        }
 
         // 4 Statistical Metric Tiles
         Row(

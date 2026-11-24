@@ -44,7 +44,8 @@ object Jkt48ConnectApiClient {
         val response: Response = try {
             chain.proceed(request)
         } catch (e: Exception) {
-            Log.e(TAG, "<-- HTTP FAILED: ${e.javaClass.simpleName} - ${e.message}")
+            // Exception messages can contain the original URL, including the API key query parameter.
+            Log.e(TAG, "<-- HTTP FAILED: ${e.javaClass.simpleName}")
             throw e
         }
         val durationMs = (System.nanoTime() - startTime) / 1_000_000

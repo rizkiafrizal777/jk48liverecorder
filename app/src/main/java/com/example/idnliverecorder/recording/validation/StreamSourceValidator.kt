@@ -62,8 +62,7 @@ class StreamSourceValidator(
      */
     suspend fun validate(
         url: String?,
-        provider: String = PROVIDER_JKT48CONNECT,
-        isRecordingAuthorized: Boolean = true
+        provider: String = PROVIDER_JKT48CONNECT
     ): ValidationResult = withContext(Dispatchers.IO) {
         if (url.isNullOrBlank()) {
             return@withContext ValidationResult(
@@ -111,7 +110,7 @@ class StreamSourceValidator(
             )
         }
 
-        // 4. Source is available, active, HLS, and authorized
+        // 4. Source is available, active, and HLS. HTTP 401/403 was handled above.
         ValidationResult(
             status = DirectStreamStatus.READY_TO_RECORD,
             format = format,

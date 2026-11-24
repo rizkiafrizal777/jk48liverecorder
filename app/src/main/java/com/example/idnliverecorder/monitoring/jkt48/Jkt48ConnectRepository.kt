@@ -9,6 +9,7 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonSyntaxException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.net.SocketTimeoutException
@@ -169,20 +170,22 @@ class Jkt48ConnectRepository(
             Log.d(TAG, "Successfully parsed ${membersList.size} IDN Live members from v3 API.")
             Result.success(membersList)
 
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: SocketTimeoutException) {
-            Log.e(TAG, "Timeout connecting to JKT48Connect API: ${e.message}")
+            Log.e(TAG, "Timeout connecting to JKT48Connect API.")
             Result.failure(SocketTimeoutException("Koneksi ke JKT48Connect timeout. Silakan periksa koneksi internet Anda."))
         } catch (e: UnknownHostException) {
-            Log.e(TAG, "Unknown host for JKT48Connect API: ${e.message}")
+            Log.e(TAG, "Unknown host for JKT48Connect API.")
             Result.failure(UnknownHostException("Tidak dapat terhubung ke server JKT48Connect. Periksa koneksi internet Anda."))
         } catch (e: JsonSyntaxException) {
             Log.e(TAG, "Malformed JSON syntax from JKT48Connect API: ${e.message}")
             Result.failure(IllegalStateException("Format data respons JSON tidak sesuai struktur."))
         } catch (e: IOException) {
-            Log.e(TAG, "Network I/O error fetching JKT48 Live: ${e.message}")
-            Result.failure(IOException("Gagal terhubung ke jaringan: ${e.localizedMessage}"))
+            Log.e(TAG, "Network I/O error fetching JKT48 Live: ${e.javaClass.simpleName}")
+            Result.failure(IOException("Gagal terhubung ke jaringan. Periksa koneksi lalu coba lagi."))
         } catch (e: Exception) {
-            Log.e(TAG, "Exception fetching JKT48 Live: ${e.message}")
+            Log.e(TAG, "Exception fetching JKT48 Live: ${e.javaClass.simpleName}")
             Result.failure(e)
         }
     }

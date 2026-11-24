@@ -1,19 +1,9 @@
-import java.util.Properties
-
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
 }
-
-val localProperties = Properties().apply {
-    val localPropertiesFile = rootProject.file("local.properties")
-    if (localPropertiesFile.exists()) {
-        localPropertiesFile.inputStream().use { load(it) }
-    }
-}
-val jkt48ApiKey: String = localProperties.getProperty("jkt48connect.api.key", "")
 
 android {
     namespace = "com.example.idnliverecorder"
@@ -28,7 +18,6 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        buildConfigField("String", "JKT48_CONNECT_API_KEY", "\"$jkt48ApiKey\"")
     }
 
     buildTypes {
@@ -55,7 +44,6 @@ android {
 
     buildFeatures {
         compose = true
-        buildConfig = true
     }
 
     testOptions {

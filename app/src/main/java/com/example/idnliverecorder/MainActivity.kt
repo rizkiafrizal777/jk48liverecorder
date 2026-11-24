@@ -36,15 +36,10 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = DarkBackground
                 ) {
-                    val recentRecordings by viewModel.recentRecordings.collectAsStateWithLifecycle()
-                    val optimalConfig by viewModel.optimalConfig.collectAsStateWithLifecycle()
 
                     // Phase 2 StateFlows
-                    val isLiveDetectionActive by viewModel.isLiveDetectionActive.collectAsStateWithLifecycle()
                     val isPermissionGranted by viewModel.isNotificationAccessGranted.collectAsStateWithLifecycle()
                     val settings by viewModel.settingsFlow.collectAsStateWithLifecycle()
-                    val recentDetections by viewModel.recentDetections.collectAsStateWithLifecycle()
-                    val todayCount by viewModel.todayDetectionCount.collectAsStateWithLifecycle()
                     val installedApps by viewModel.installedApps.collectAsStateWithLifecycle()
                     val isLoadingApps by viewModel.isLoadingApps.collectAsStateWithLifecycle()
 
@@ -56,13 +51,8 @@ class MainActivity : ComponentActivity() {
                     val activeRecordingMember by jkt48ViewModel.activeRecordingMember.collectAsStateWithLifecycle()
 
                     DashboardScreen(
-                        recentRecordings = recentRecordings,
-                        optimalConfig = optimalConfig,
-                        isLiveDetectionActive = isLiveDetectionActive,
                         isPermissionGranted = isPermissionGranted,
                         settings = settings,
-                        recentDetections = recentDetections,
-                        todayCount = todayCount,
                         installedApps = installedApps,
                         isLoadingApps = isLoadingApps,
                         jkt48UiState = jkt48UiState,
@@ -78,7 +68,6 @@ class MainActivity : ComponentActivity() {
                         libraryViewModel = libraryViewModel,
                         selectedTab = selectedTabState.intValue,
                         onTabSelected = { selectedTabState.intValue = it },
-                        onRefreshRecordings = { viewModel.refreshRecordings() },
                         onRefreshPermission = { viewModel.refreshPermissions() },
                         onOpenAppPicker = { viewModel.loadInstalledApps() },
                         onAppSelected = { app ->
@@ -113,7 +102,6 @@ class MainActivity : ComponentActivity() {
         if (intent.getStringExtra("navigate_to") == "library") {
             selectedTabState.intValue = 2
             libraryViewModel.refreshLibraryWithRetry()
-            viewModel.refreshRecordings()
         }
     }
 

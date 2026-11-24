@@ -57,7 +57,6 @@ class DirectRecordingService : Service() {
 
         const val EXTRA_STREAM_URL = "extra_stream_url"
         const val EXTRA_MEMBER_NAME = "extra_member_name"
-        const val EXTRA_IS_AUTHORIZED = "extra_is_authorized"
 
         private val _engineStatus = MutableStateFlow(DirectStreamStatus.SOURCE_UNAVAILABLE)
         val engineStatus: StateFlow<DirectStreamStatus> = _engineStatus.asStateFlow()
@@ -96,9 +95,7 @@ class DirectRecordingService : Service() {
             ACTION_START_DIRECT -> {
                 val streamUrl = intent.getStringExtra(EXTRA_STREAM_URL) ?: ""
                 val memberName = intent.getStringExtra(EXTRA_MEMBER_NAME) ?: "JKT48"
-                val isAuthorized = intent.getBooleanExtra(EXTRA_IS_AUTHORIZED, true)
-
-                startDirectRecording(streamUrl, memberName, isAuthorized)
+                startDirectRecording(streamUrl, memberName)
             }
 
             ACTION_STOP_DIRECT -> {
@@ -109,7 +106,7 @@ class DirectRecordingService : Service() {
         return START_NOT_STICKY
     }
 
-    private fun startDirectRecording(streamUrl: String, memberName: String, isAuthorized: Boolean) {
+    private fun startDirectRecording(streamUrl: String, memberName: String) {
         if (isStoppingInProgress.get()) {
             Log.w(TAG, "Ignoring direct recording start while the current session is finalizing.")
             return
@@ -142,7 +139,6 @@ class DirectRecordingService : Service() {
             context = applicationContext,
             streamUrl = streamUrl,
             memberName = memberName,
-            isRecordingAuthorized = isAuthorized,
             onStatusChanged = { status, msg ->
                 if (recordingEngine !== newEngine) {
                     Log.w(TAG, "Ignoring status from an inactive recording engine: $status")
@@ -208,7 +204,8 @@ class DirectRecordingService : Service() {
                     memberName = savedMemberName,
                     displayName = summary.displayName,
                     sizeBytes = summary.sizeBytes,
-                    videoUri = summary.uri
+                    videoUri = summary.uri,
+                    warningMessage = summary.warningMessage
                 )
             } else {
                 _engineStatus.value = DirectStreamStatus.ERROR
@@ -228,7 +225,8 @@ class DirectRecordingService : Service() {
         memberName: String,
         displayName: String,
         sizeBytes: Long,
-        videoUri: Uri?
+        videoUri: Uri?,
+        warningMessage: String?
     ) {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val openAppIntent = Intent(this, MainActivity::class.java).apply {
@@ -245,8 +243,8 @@ class DirectRecordingService : Service() {
 
         val sizeFormatted = sizeBytes.formatFileSize()
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Rekaman Selesai — $memberName")
-            .setContentText("File: $displayName ($sizeFormatted)")
+            .setContentTitle(if (warningMessage == null) "Rekaman Selesai - $memberName" else "Rekaman Parsial - $memberName")
+            .setContentText(warningMessage ?: "File: $displayName ($sizeFormatted)")
             .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(openAppPendingIntent)
             .setAutoCancel(true)
