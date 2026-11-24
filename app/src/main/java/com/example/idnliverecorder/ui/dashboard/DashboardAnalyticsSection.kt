@@ -78,10 +78,10 @@ fun DashboardAnalyticsSection(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(20.dp))
             .background(SurfaceDark)
-            .border(1.dp, CardBorder, RoundedCornerShape(16.dp))
-            .padding(16.dp)
+            .border(1.dp, CardBorder, RoundedCornerShape(20.dp))
+            .padding(18.dp)
     ) {
         // Section Header
         Row(
@@ -128,7 +128,7 @@ fun DashboardAnalyticsSection(
                     .padding(horizontal = 6.dp, vertical = 4.dp)
             ) {
                 Text(
-                    text = "Buka Library",
+                    text = "Lihat semua",
                     color = AccentCyan,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold
@@ -160,7 +160,7 @@ fun DashboardAnalyticsSection(
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(10.dp))
-                Text("Memuat ringkasan rekaman…", color = TextSecondary, fontSize = 12.sp)
+                Text("Memuat ringkasan rekaman…", color = TextSecondary, fontSize = 13.sp)
             }
             Spacer(modifier = Modifier.height(12.dp))
         } else if (loadError != null && recordings.isEmpty()) {
@@ -194,10 +194,14 @@ fun DashboardAnalyticsSection(
 
         if (recordings.isEmpty() && !isLoading && loadError == null) {
             Text(
-                text = "Belum ada rekaman. File yang berhasil disimpan akan muncul di sini.",
+                text = "Belum ada rekaman tersimpan. Rekaman yang selesai akan muncul di sini.",
                 color = TextSecondary,
-                fontSize = 12.sp,
-                modifier = Modifier.padding(bottom = 12.dp)
+                fontSize = 13.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(SurfaceVariantDark)
+                    .padding(14.dp)
             )
         }
 
@@ -256,11 +260,10 @@ fun DashboardAnalyticsSection(
         if (recordings.isNotEmpty()) {
             Spacer(modifier = Modifier.height(14.dp))
             Text(
-                text = "DISTRIBUSI MEMBER TERBANYAK",
+                text = "Rekaman per member",
                 color = AccentCyan,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
             )
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -303,11 +306,10 @@ fun DashboardAnalyticsSection(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "AKTIVITAS EKSPOR TERAKHIR",
+                    text = "Ekspor terbaru",
                     color = AccentGreen,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
                 )
                 Text(
                     text = "${recentExports.size} riwayat",
@@ -337,17 +339,17 @@ private fun MetricTile(
 ) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(14.dp))
             .background(SurfaceVariantDark)
-            .border(1.dp, CardBorder, RoundedCornerShape(10.dp))
-            .padding(10.dp)
+            .border(1.dp, CardBorder, RoundedCornerShape(14.dp))
+            .padding(12.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = title, color = TextTertiary, fontSize = 10.sp)
+            Text(text = title, color = TextSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Icon(imageVector = icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(14.dp))
         }
         Spacer(modifier = Modifier.height(4.dp))
@@ -355,8 +357,10 @@ private fun MetricTile(
             Text(
                 text = value,
                 color = TextPrimary,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             if (unit.isNotBlank()) {
                 Spacer(modifier = Modifier.width(3.dp))

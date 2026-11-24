@@ -134,7 +134,7 @@ fun Jkt48LiveMonitorScreen(
         modifier = modifier
             .fillMaxSize()
             .background(DarkBackground)
-            .padding(horizontal = 20.dp, vertical = 16.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         // Section Header
         Row(
@@ -152,7 +152,7 @@ fun Jkt48LiveMonitorScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "JKT48 Live Monitor",
+                        text = "Live JKT48",
                         color = TextPrimary,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold
@@ -160,7 +160,7 @@ fun Jkt48LiveMonitorScreen(
                 }
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "Phase 5 • Direct Livestream Recording",
+                    text = "Pantau dan rekam siaran langsung",
                     color = TextTertiary,
                     fontSize = 12.sp
                 )
@@ -170,7 +170,7 @@ fun Jkt48LiveMonitorScreen(
                 IconButton(onClick = { showApiKeyDialog = true }) {
                     Icon(
                         imageVector = Icons.Default.Key,
-                        contentDescription = "Config API Key",
+                        contentDescription = "Atur kunci API",
                         tint = if (apiKey.isBlank()) AccentAmber else AccentCyan
                     )
                 }
@@ -178,7 +178,7 @@ fun Jkt48LiveMonitorScreen(
                 IconButton(onClick = onRefresh) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
-                        contentDescription = "Refresh",
+                        contentDescription = "Muat ulang live",
                         tint = TextSecondary
                     )
                 }
@@ -252,13 +252,13 @@ fun Jkt48LiveMonitorScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
                             Text(
-                                text = "Merekam Direct Stream: $activeRecordingMember",
+                                text = "Sedang merekam: $activeRecordingMember",
                                 color = TextPrimary,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Durasi: ${directRecordingDurationMs.formatDuration()} • Latar Belakang",
+                                text = "Durasi ${directRecordingDurationMs.formatDuration()} · berjalan di latar belakang",
                                 color = AccentCyan,
                                 fontSize = 11.sp,
                                 fontFamily = FontFamily.Monospace
@@ -429,7 +429,7 @@ fun Jkt48LiveMonitorScreen(
                             )
 
                             Text(
-                                text = "Ketuk untuk melihat detail",
+                                text = "Ketuk kartu untuk detail",
                                 color = TextTertiary,
                                 fontSize = 11.sp
                             )
@@ -452,7 +452,7 @@ fun Jkt48LiveMonitorScreen(
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(9.dp))
-                                Text("Memperbarui data live…", color = TextSecondary, fontSize = 12.sp)
+                                Text("Memperbarui data live…", color = TextSecondary, fontSize = 13.sp)
                             }
                         }
                     }
@@ -623,7 +623,7 @@ private fun LiveMemberCard(
                 IconButton(onClick = onToggleFavorite) {
                     Icon(
                         imageVector = if (member.isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
-                        contentDescription = "Toggle Favorite",
+                        contentDescription = if (member.isFavorite) "Hapus dari favorit" else "Tambahkan ke favorit",
                         tint = if (member.isFavorite) AccentAmber else TextSecondary
                     )
                 }
@@ -664,7 +664,7 @@ private fun LiveMemberCard(
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Text(
-                        text = if (member.isStreamAvailable) "SOURCE AVAILABLE" else "SOURCE UNAVAILABLE",
+                        text = if (member.isStreamAvailable) "SUMBER TERSEDIA" else "SUMBER TIDAK TERSEDIA",
                         color = if (member.isStreamAvailable) AccentGreen else TextTertiary,
                         fontSize = 9.sp,
                         fontWeight = FontWeight.Bold
@@ -682,7 +682,7 @@ private fun LiveMemberCard(
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Text(
-                        text = if (isRecordingActive) "MEREKAM" else "SIAP MEREKAM",
+                        text = if (isRecordingActive) "MEREKAM" else "SIAP DIREKAM",
                         color = if (isRecordingActive) PrimaryRed else AccentGreen,
                         fontSize = 9.sp,
                         fontWeight = FontWeight.Bold

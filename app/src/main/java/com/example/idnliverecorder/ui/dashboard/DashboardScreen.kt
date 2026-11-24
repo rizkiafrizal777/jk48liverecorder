@@ -157,16 +157,15 @@ fun DashboardScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = 16.dp)
         ) {
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             AppHeader(onRefresh = {
                 libraryViewModel?.refreshLibrary()
                 onRefreshPermission()
                 onRefreshJkt48()
             })
-            Spacer(modifier = Modifier.height(12.dp))
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(16.dp))
         when (selectedTab) {
             0 -> {
                 Column(
@@ -331,7 +330,7 @@ private fun AppHeader(onRefresh: () -> Unit) {
         IconButton(onClick = onRefresh) {
             Icon(
                 imageVector = Icons.Default.Refresh,
-                contentDescription = "Refresh Status",
+                contentDescription = "Muat ulang data",
                 tint = TextSecondary
             )
         }
