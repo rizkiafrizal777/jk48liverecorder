@@ -18,7 +18,7 @@ import java.util.concurrent.TimeUnit
 object Jkt48ConnectApiClient {
 
     private const val TAG = "Jkt48ConnectClient"
-    const val DEFAULT_BASE_URL = "https://v2.jkt48connect.com/"
+    const val DEFAULT_BASE_URL = "https://v3.jkt48connect.com/"
 
     /**
      * Interceptor that logs sanitized HTTP requests and responses,

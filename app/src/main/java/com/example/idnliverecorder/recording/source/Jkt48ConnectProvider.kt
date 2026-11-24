@@ -95,3 +95,4 @@ class Jkt48ConnectProvider(
         stop()
     }
 }
+

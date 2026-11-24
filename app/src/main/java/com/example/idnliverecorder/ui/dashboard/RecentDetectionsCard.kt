@@ -48,7 +48,6 @@ import com.example.idnliverecorder.ui.theme.TextTertiary
 @Composable
 fun RecentDetectionsSection(
     detections: List<DetectedLiveItem>,
-    onConfirmClick: (DetectedLiveItem) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
@@ -108,10 +107,7 @@ fun RecentDetectionsSection(
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 detections.take(6).forEach { item ->
-                    DetectionItemRow(
-                        item = item,
-                        onConfirmClick = { onConfirmClick(item) }
-                    )
+                    DetectionItemRow(item = item)
                 }
             }
         }
@@ -120,8 +116,7 @@ fun RecentDetectionsSection(
 
 @Composable
 private fun DetectionItemRow(
-    item: DetectedLiveItem,
-    onConfirmClick: () -> Unit
+    item: DetectedLiveItem
 ) {
     val statusColor = when (item.status) {
         DetectionStatus.Waiting -> AccentAmber
@@ -164,22 +159,6 @@ private fun DetectionItemRow(
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold
                 )
-                if (item.isSimulation) {
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(AccentAmber.copy(alpha = 0.2f))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = "DEMO",
-                            color = AccentAmber,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
             }
             Spacer(modifier = Modifier.height(2.dp))
             Text(
@@ -189,7 +168,7 @@ private fun DetectionItemRow(
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = if (item.isSimulation) "Sumber: Tes Simulasi Internal" else "Keyword: \"${item.matchedKeyword}\"",
+                text = "Kata kunci: \"${item.matchedKeyword}\"",
                 color = TextSecondary,
                 fontSize = 11.sp
             )
@@ -197,32 +176,18 @@ private fun DetectionItemRow(
 
         Spacer(modifier = Modifier.width(8.dp))
 
-        if (item.status == DetectionStatus.Waiting) {
-            Button(
-                onClick = onConfirmClick,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = PrimaryRed,
-                    contentColor = Color.White
-                ),
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.height(34.dp)
-            ) {
-                Text(text = "Konfirmasi", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            }
-        } else {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(statusColor.copy(alpha = 0.15f))
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-            ) {
-                Text(
-                    text = item.status.name,
-                    color = statusColor,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(statusColor.copy(alpha = 0.15f))
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+        ) {
+            Text(
+                text = item.status.name,
+                color = statusColor,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold
+            )
         }
     }
 }

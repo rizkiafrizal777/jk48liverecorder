@@ -26,6 +26,9 @@ fun Long.formatFileSize(): String {
     return String.format(Locale.getDefault(), "%.1f %s", value, units[boundedGroup])
 }
 
+@JvmName("formatFileSizeFromLong")
+fun formatFileSize(bytes: Long): String = bytes.formatFileSize()
+
 fun Long.formatDate(): String {
     val sdf = SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault())
     return sdf.format(Date(this))

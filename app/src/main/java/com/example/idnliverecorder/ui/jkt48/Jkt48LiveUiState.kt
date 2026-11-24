@@ -11,14 +11,12 @@ sealed interface Jkt48LiveUiState {
 
     data class Success(
         val members: List<Jkt48LiveMember>,
-        val lastUpdatedMs: Long = System.currentTimeMillis(),
-        val isDemoData: Boolean = false
+        val lastUpdatedMs: Long = System.currentTimeMillis()
     ) : Jkt48LiveUiState
 
     data class Empty(
         val message: String = "Tidak ada member JKT48 yang sedang live di IDN saat ini.",
-        val lastCheckedMs: Long = System.currentTimeMillis(),
-        val isDemoData: Boolean = false
+        val lastCheckedMs: Long = System.currentTimeMillis()
     ) : Jkt48LiveUiState
 
     data class Error(

@@ -20,15 +20,18 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.LiveTv
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -51,12 +54,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.idnliverecorder.core.formatDuration
 import com.example.idnliverecorder.monitoring.jkt48.Jkt48LiveMember
+import com.example.idnliverecorder.recording.direct.DirectStreamStatus
 import com.example.idnliverecorder.ui.theme.AccentAmber
 import com.example.idnliverecorder.ui.theme.AccentCyan
 import com.example.idnliverecorder.ui.theme.AccentGreen
@@ -77,14 +83,19 @@ import java.util.Locale
 fun Jkt48LiveMonitorScreen(
     uiState: Jkt48LiveUiState,
     apiKey: String,
+    directRecordingStatus: DirectStreamStatus = DirectStreamStatus.SOURCE_UNAVAILABLE,
+    directRecordingDurationMs: Long = 0L,
+    activeRecordingMember: String? = null,
     onRefresh: () -> Unit,
     onToggleFavorite: (String) -> Unit,
     onSaveApiKey: (String) -> Unit,
-    onLoadDemoData: () -> Unit = {},
+    onStartDirectRecording: (Jkt48LiveMember) -> Unit = {},
+    onStopDirectRecording: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showApiKeyDialog by remember { mutableStateOf(false) }
     var selectedMemberForDetail by remember { mutableStateOf<Jkt48LiveMember?>(null) }
+    var memberToConfirmRecording by remember { mutableStateOf<Jkt48LiveMember?>(null) }
 
     // API Key Dialog
     if (showApiKeyDialog) {
@@ -98,12 +109,22 @@ fun Jkt48LiveMonitorScreen(
         )
     }
 
+    // Explicit Recording Confirmation Dialog (Requirement 8)
+    memberToConfirmRecording?.let { member ->
+        DirectRecordingConfirmationDialog(
+            member = member,
+            onConfirmStart = {
+                onStartDirectRecording(member)
+                memberToConfirmRecording = null
+            },
+            onDismiss = { memberToConfirmRecording = null }
+        )
+    }
+
     // Livestream Detail Dialog (Requirement 3)
     selectedMemberForDetail?.let { member ->
-        val isDemo = (uiState is Jkt48LiveUiState.Success && uiState.isDemoData)
         LivestreamDetailDialog(
             member = member,
-            isDemoData = isDemo,
             onDismiss = { selectedMemberForDetail = null }
         )
     }
@@ -138,7 +159,7 @@ fun Jkt48LiveMonitorScreen(
                 }
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "IDN Live Tracker • JKT48Connect Review",
+                    text = "Phase 5 • Direct Livestream Recording",
                     color = TextTertiary,
                     fontSize = 12.sp
                 )
@@ -205,67 +226,58 @@ fun Jkt48LiveMonitorScreen(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Demo Data Notice Banner (Requirement 2: Data simulasi harus diberi label DEMO)
-        if (uiState is Jkt48LiveUiState.Success && uiState.isDemoData) {
+        // Active Background Recording Banner (if service is running)
+        if (directRecordingStatus == DirectStreamStatus.RECORDING && !activeRecordingMember.isNullOrBlank()) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xFF221A15))
-                    .border(1.dp, AccentAmber.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
-                    .padding(10.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(PrimaryRed.copy(alpha = 0.15f))
+                    .border(1.dp, PrimaryRed, RoundedCornerShape(12.dp))
+                    .padding(12.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(AccentAmber)
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = "DEMO DATA",
-                            color = Color.Black,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(PrimaryRed)
                         )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "Merekam Direct Stream: $activeRecordingMember",
+                                color = TextPrimary,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Durasi: ${directRecordingDurationMs.formatDuration()} • Latar Belakang",
+                                color = AccentCyan,
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Data sampel untuk peninjauan Free Developer Program JKT48Connect.",
-                        color = AccentAmber,
-                        fontSize = 11.sp,
-                        lineHeight = 15.sp
-                    )
+
+                    Button(
+                        onClick = onStopDirectRecording,
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryRed),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(text = "Stop", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
-            Spacer(modifier = Modifier.height(12.dp))
-        }
-
-        // Security Warning Banner (Requirement 10 Phase 4A)
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
-                .background(Color(0xFF161922))
-                .padding(10.dp)
-        ) {
-            Row(verticalAlignment = Alignment.Top) {
-                Icon(
-                    imageVector = Icons.Default.Warning,
-                    contentDescription = null,
-                    tint = AccentCyan,
-                    modifier = Modifier
-                        .size(15.dp)
-                        .padding(top = 1.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "API Key disimpan secara lokal di perangkat. Kredensial tidak pernah dikirim ke logcat atau publik.",
-                    color = TextTertiary,
-                    fontSize = 10.sp,
-                    lineHeight = 14.sp
-                )
-            }
+            Spacer(modifier = Modifier.height(10.dp))
         }
 
         Spacer(modifier = Modifier.height(14.dp))
@@ -330,13 +342,6 @@ fun Jkt48LiveMonitorScreen(
                             ) {
                                 Text("Cek Ulang", color = TextPrimary, fontSize = 13.sp)
                             }
-                            OutlinedButton(
-                                onClick = onLoadDemoData,
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = AccentAmber),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, AccentAmber.copy(alpha = 0.5f))
-                            ) {
-                                Text("Muat Demo", fontSize = 13.sp)
-                            }
                         }
                     }
                 }
@@ -397,13 +402,6 @@ fun Jkt48LiveMonitorScreen(
                                 }
                             }
 
-                            OutlinedButton(
-                                onClick = onLoadDemoData,
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = AccentAmber),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, AccentAmber.copy(alpha = 0.5f))
-                            ) {
-                                Text("Tampilkan Demo", fontSize = 13.sp)
-                            }
                         }
                     }
                 }
@@ -438,11 +436,17 @@ fun Jkt48LiveMonitorScreen(
                     }
 
                     items(uiState.members, key = { it.sessionKey }) { member ->
+                        val isRecordingThisMember = (directRecordingStatus == DirectStreamStatus.RECORDING &&
+                                activeRecordingMember == member.memberName)
+
                         LiveMemberCard(
                             member = member,
-                            isDemo = uiState.isDemoData,
+                            isRecordingActive = isRecordingThisMember,
+                            recordingDurationMs = directRecordingDurationMs,
                             onCardClick = { selectedMemberForDetail = member },
-                            onToggleFavorite = { onToggleFavorite(member.memberName) }
+                            onToggleFavorite = { onToggleFavorite(member.memberName) },
+                            onRequestRecord = { memberToConfirmRecording = member },
+                            onStopRecord = onStopDirectRecording
                         )
                     }
                 }
@@ -456,16 +460,21 @@ fun Jkt48LiveMonitorScreen(
 @Composable
 private fun LiveMemberCard(
     member: Jkt48LiveMember,
-    isDemo: Boolean,
+    isRecordingActive: Boolean,
+    recordingDurationMs: Long,
     onCardClick: () -> Unit,
-    onToggleFavorite: () -> Unit
+    onToggleFavorite: () -> Unit,
+    onRequestRecord: () -> Unit,
+    onStopRecord: () -> Unit
 ) {
+    val borderColor = if (isRecordingActive) PrimaryRed else CardBorder
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .background(SurfaceDark)
-            .border(1.dp, if (isDemo) CardBorder else CardBorder, RoundedCornerShape(16.dp))
+            .border(if (isRecordingActive) 1.5.dp else 1.dp, borderColor, RoundedCornerShape(16.dp))
             .clickable { onCardClick() }
             .padding(14.dp)
     ) {
@@ -580,6 +589,90 @@ private fun LiveMemberCard(
                 )
             }
         }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Phase 5 Availability & Recording Action Bar
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFF141722))
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Stream & Recording Availability Chips
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // Stream Availability
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(
+                            if (member.isStreamAvailable) AccentGreen.copy(alpha = 0.15f)
+                            else CardBorder.copy(alpha = 0.3f)
+                        )
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = if (member.isStreamAvailable) "SOURCE AVAILABLE" else "SOURCE UNAVAILABLE",
+                        color = if (member.isStreamAvailable) AccentGreen else TextTertiary,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                // Recording Availability Status
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(
+                            if (isRecordingActive) PrimaryRed.copy(alpha = 0.2f)
+                            else AccentGreen.copy(alpha = 0.15f)
+                        )
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = if (isRecordingActive) "MEREKAM" else "SIAP MEREKAM",
+                        color = if (isRecordingActive) PrimaryRed else AccentGreen,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            // Start / Stop Direct Record Action Button
+            if (isRecordingActive) {
+                Button(
+                    onClick = onStopRecord,
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryRed),
+                    shape = RoundedCornerShape(6.dp),
+                    modifier = Modifier.height(28.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(12.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Stop (${recordingDurationMs.formatDuration()})",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            } else {
+                OutlinedButton(
+                    onClick = onRequestRecord,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = AccentCyan),
+                    shape = RoundedCornerShape(6.dp),
+                    modifier = Modifier.height(28.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.Videocam, contentDescription = null, modifier = Modifier.size(12.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(text = "Direct Record", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
     }
 }
 
@@ -597,7 +690,7 @@ private fun ApiKeyConfigDialog(
         text = {
             Column {
                 Text(
-                    text = "Dapatkan API key dari portal JKT48Connect (https://v2.jkt48connect.com).\nKey disimpan secara lokal di perangkat Anda.",
+                    text = "Dapatkan API key dari portal JKT48Connect (https://v3.jkt48connect.com).\nKey disimpan secara lokal di perangkat Anda.",
                     color = TextSecondary,
                     fontSize = 12.sp
                 )

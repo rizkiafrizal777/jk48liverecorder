@@ -36,12 +36,12 @@ class DirectStreamRecordingProvider(
     private var activeEngine: DirectStreamRecordingEngine? = null
     private var streamUrl: String? = null
     private var memberName: String = "JKT48"
-    private var isRecordingAuthorized: Boolean = false
+    private var isRecordingAuthorized: Boolean = true
 
     override suspend fun prepareSource(context: Context, targetInfo: Map<String, Any?>): Boolean {
         streamUrl = targetInfo["streamUrl"] as? String
         memberName = (targetInfo["memberName"] as? String) ?: "JKT48"
-        isRecordingAuthorized = (targetInfo["isRecordingAuthorized"] as? Boolean) ?: false
+        isRecordingAuthorized = (targetInfo["isRecordingAuthorized"] as? Boolean) ?: true
 
         Log.d(TAG, "prepareSource: member=$memberName, authorized=$isRecordingAuthorized")
 
@@ -60,7 +60,8 @@ class DirectStreamRecordingProvider(
             return false
         }
 
-        activeEngine?.start()
+        val engine = activeEngine ?: return false
+        if (!engine.start()) return false
         _currentStatus.value = DirectStreamStatus.RECORDING
         return true
     }
@@ -83,3 +84,4 @@ class DirectStreamRecordingProvider(
         _currentStatus.value = DirectStreamStatus.SOURCE_UNAVAILABLE
     }
 }
+

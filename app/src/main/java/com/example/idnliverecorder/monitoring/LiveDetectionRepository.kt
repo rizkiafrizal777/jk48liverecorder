@@ -2,6 +2,8 @@ package com.example.idnliverecorder.monitoring
 
 import android.content.Context
 import android.content.SharedPreferences
+import org.json.JSONArray
+import org.json.JSONObject
 import com.example.idnliverecorder.data.DetectedLiveItem
 import com.example.idnliverecorder.data.DetectionStatus
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -156,17 +158,19 @@ class LiveDetectionRepository(context: Context) {
     }
 
     private fun saveDetections(items: List<DetectedLiveItem>) {
-        val serialized = items.joinToString(";;") { item ->
-            listOf(
-                item.id,
-                item.streamerName,
-                item.notificationContent.replace(";;", " ").replace("||", " "),
-                item.detectedAtMs.toString(),
-                item.status.name,
-                item.packageName,
-                item.matchedKeyword
-            ).joinToString("||")
+        val entries = JSONArray()
+        items.forEach { item ->
+            entries.put(JSONObject().apply {
+                put("id", item.id)
+                put("streamerName", item.streamerName)
+                put("notificationContent", item.notificationContent)
+                put("detectedAtMs", item.detectedAtMs)
+                put("status", item.status.name)
+                put("packageName", item.packageName)
+                put("matchedKeyword", item.matchedKeyword)
+            })
         }
+        val serialized = JSONObject().put("version", 1).put("items", entries).toString()
         prefs.edit().putString(KEY_DETECTIONS, serialized).apply()
     }
 
@@ -174,20 +178,52 @@ class LiveDetectionRepository(context: Context) {
         val raw = prefs.getString(KEY_DETECTIONS, null) ?: return emptyList()
         if (raw.isBlank()) return emptyList()
 
+        return parseJsonDetections(raw) ?: parseLegacyDetections(raw)
+    }
+
+    private fun parseJsonDetections(raw: String): List<DetectedLiveItem>? {
+        return try {
+            val entries = JSONObject(raw).optJSONArray("items") ?: return null
+            buildList {
+                for (index in 0 until entries.length()) {
+                    val entry = entries.optJSONObject(index) ?: continue
+                    val id = entry.optString("id").takeIf { it.isNotBlank() } ?: continue
+                    add(
+                        DetectedLiveItem(
+                            id = id,
+                            streamerName = entry.optString("streamerName"),
+                            notificationContent = entry.optString("notificationContent"),
+                            detectedAtMs = entry.optLong("detectedAtMs", System.currentTimeMillis()),
+                            status = runCatching {
+                                DetectionStatus.valueOf(entry.optString("status"))
+                            }.getOrDefault(DetectionStatus.Expired),
+                            packageName = entry.optString("packageName"),
+                            matchedKeyword = entry.optString("matchedKeyword")
+                        )
+                    )
+                }
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /** Reads the old delimiter format so existing saved detection history survives the format change. */
+    private fun parseLegacyDetections(raw: String): List<DetectedLiveItem> {
         return try {
             raw.split(";;").mapNotNull { entry ->
                 val parts = entry.split("||")
-                if (parts.size >= 7) {
-                    DetectedLiveItem(
-                        id = parts[0],
-                        streamerName = parts[1],
-                        notificationContent = parts[2],
-                        detectedAtMs = parts[3].toLongOrNull() ?: System.currentTimeMillis(),
-                        status = runCatching { DetectionStatus.valueOf(parts[4]) }.getOrDefault(DetectionStatus.Expired),
-                        packageName = parts[5],
-                        matchedKeyword = parts[6]
-                    )
-                } else null
+                if (parts.size < 7) return@mapNotNull null
+                DetectedLiveItem(
+                    id = parts[0],
+                    streamerName = parts[1],
+                    notificationContent = parts[2],
+                    detectedAtMs = parts[3].toLongOrNull() ?: System.currentTimeMillis(),
+                    status = runCatching { DetectionStatus.valueOf(parts[4]) }
+                        .getOrDefault(DetectionStatus.Expired),
+                    packageName = parts[5],
+                    matchedKeyword = parts.drop(6).joinToString("||")
+                )
             }
         } catch (_: Exception) {
             emptyList()

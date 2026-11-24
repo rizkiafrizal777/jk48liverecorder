@@ -137,22 +137,6 @@ class LiveDetectionManager(private val context: Context) {
         }
     }
 
-    fun simulateTestDetection(streamerName: String, sampleMessage: String = "sedang live sekarang!") {
-        val currentSettings = settings.settingsFlow.value
-        val fakeKey = "test_key_${UUID.randomUUID()}"
-        val targetPkg = currentSettings.targetPackageName ?: "com.idn.app.test"
-
-        val item = repository.addDetection(
-            notificationKey = fakeKey,
-            streamerName = streamerName,
-            content = "$streamerName $sampleMessage",
-            packageName = targetPkg,
-            matchedKeyword = "live"
-        )
-
-        showDetectionNotification(item)
-    }
-
     private fun showDetectionNotification(item: DetectedLiveItem) {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 

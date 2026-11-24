@@ -3,6 +3,7 @@ package com.example.idnliverecorder.monitoring.jkt48
 import android.content.Context
 import android.content.SharedPreferences
 import com.example.idnliverecorder.BuildConfig
+import com.example.idnliverecorder.monitoring.jkt48.api.Jkt48ConnectApiClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -48,7 +49,8 @@ class Jkt48LivePreferences(context: Context) {
     }
 
     private fun loadBaseUrl(): String {
-        return prefs.getString(KEY_BASE_URL, null) ?: "https://v2.jkt48connect.com/"
+        val stored = prefs.getString(KEY_BASE_URL, null)
+        return stored?.takeIf { it.isNotBlank() } ?: Jkt48ConnectApiClient.DEFAULT_BASE_URL
     }
 
     fun setApiKey(newKey: String) {

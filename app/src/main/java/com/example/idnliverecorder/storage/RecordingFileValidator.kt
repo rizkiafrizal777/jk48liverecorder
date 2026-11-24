@@ -52,11 +52,14 @@ object RecordingFileValidator {
             val width = widthStr?.toIntOrNull() ?: 0
             val height = heightStr?.toIntOrNull() ?: 0
 
-            if (hasVideo == null && durationMs <= 0) {
+            if (!hasVideo.equals("yes", ignoreCase = true)) {
                 ValidationResult(
                     isValid = false,
                     sizeBytes = size,
-                    errorMessage = "MP4 file header is corrupt or missing video tracks."
+                    durationMs = durationMs,
+                    width = width,
+                    height = height,
+                    errorMessage = "MP4 tidak memiliki track video yang dapat dibaca."
                 )
             } else {
                 ValidationResult(

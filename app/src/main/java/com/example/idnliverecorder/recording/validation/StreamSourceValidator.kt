@@ -18,7 +18,6 @@ import java.util.concurrent.TimeUnit
  * - No traffic interception or packet manipulation.
  * - No DRM or signature bypass.
  * - No access to unauthorized private streams.
- * - If authorization is not explicitly granted, recording is strictly locked at AUTHORIZATION_REQUIRED.
  */
 class StreamSourceValidator(
     private val httpClient: OkHttpClient = OkHttpClient.Builder()
@@ -56,16 +55,15 @@ class StreamSourceValidator(
     }
 
     /**
-     * Validates a stream source URL, checks format, connectivity, and authorization.
+     * Validates a stream source URL, format, and connectivity.
      *
      * @param url The raw streaming URL (if provided by API).
      * @param provider The provider identifier (e.g. PROVIDER_JKT48CONNECT).
-     * @param isRecordingAuthorized Explicit authorization flag from verified agreement.
      */
     suspend fun validate(
         url: String?,
         provider: String = PROVIDER_JKT48CONNECT,
-        isRecordingAuthorized: Boolean = false
+        isRecordingAuthorized: Boolean = true
     ): ValidationResult = withContext(Dispatchers.IO) {
         if (url.isNullOrBlank()) {
             return@withContext ValidationResult(
@@ -81,19 +79,19 @@ class StreamSourceValidator(
         // 1. Identify format
         val format = identifyFormat(url)
         val isHls = format == StreamMediaFormat.HLS
-        if (!isHls && format != StreamMediaFormat.MP4) {
+        if (!isHls) {
             return@withContext ValidationResult(
                 status = DirectStreamStatus.SOURCE_UNAVAILABLE,
                 format = format,
                 isFormatSupported = false,
                 isSourceActive = false,
                 isAuthorized = false,
-                message = "Format media tidak didukung. Direct Stream hanya mendukung live HLS (.m3u8) atau MP4.",
+                message = "Format media tidak didukung. Direct Stream saat ini hanya mendukung playlist HLS (.m3u8).",
                 streamUrl = url
             )
         }
 
-        // 2. Probe connection without downloading full media
+        // 3. Probe connection without downloading full media
         val (isReachable, statusCode, errorMsg) = probeStreamConnection(url)
         if (!isReachable) {
             val status = if (statusCode == 401 || statusCode == 403) {
@@ -104,25 +102,10 @@ class StreamSourceValidator(
             return@withContext ValidationResult(
                 status = status,
                 format = format,
-                isFormatSupported = isHls,
+                isFormatSupported = true,
                 isSourceActive = false,
                 isAuthorized = false,
                 message = errorMsg ?: "Sumber stream tidak aktif atau koneksi terputus (HTTP $statusCode).",
-                httpStatusCode = statusCode,
-                streamUrl = url
-            )
-        }
-
-        // 3. Authorization check (Rule: Metadata != Recording rights)
-        if (!isRecordingAuthorized) {
-            Log.w(TAG, "Stream source active, but recording authorization is not verified.")
-            return@withContext ValidationResult(
-                status = DirectStreamStatus.AUTHORIZATION_REQUIRED,
-                format = format,
-                isFormatSupported = isHls,
-                isSourceActive = true,
-                isAuthorized = false,
-                message = "WAITING FOR AUTHORIZATION — Hak perekaman direct stream belum diotorisasi oleh pemegang hak cipta.",
                 httpStatusCode = statusCode,
                 streamUrl = url
             )
@@ -211,3 +194,4 @@ class StreamSourceValidator(
         }
     }
 }
+

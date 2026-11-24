@@ -18,3 +18,4 @@ enum class DirectStreamStatus(val label: String) {
     COMPLETED("COMPLETED"),
     ERROR("ERROR")
 }
+

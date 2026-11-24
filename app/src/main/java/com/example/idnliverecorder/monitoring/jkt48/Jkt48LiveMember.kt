@@ -15,12 +15,18 @@ data class Jkt48LiveMember(
     val platform: String,
     val streamingUrls: List<String> = emptyList(),
     val viewers: Long? = null,
-    val isFavorite: Boolean = false
+    val isFavorite: Boolean = false,
+    val directRecordingStatus: com.example.idnliverecorder.recording.direct.DirectStreamStatus =
+        if (streamingUrls.isNotEmpty()) com.example.idnliverecorder.recording.direct.DirectStreamStatus.READY_TO_RECORD
+        else com.example.idnliverecorder.recording.direct.DirectStreamStatus.SOURCE_UNAVAILABLE
 ) {
     /**
      * Unique identifier for live session deduplication.
      */
     val sessionKey: String
         get() = "${roomId}_${startedAt ?: slug ?: memberName}"
+
+    val isStreamAvailable: Boolean
+        get() = streamingUrls.isNotEmpty()
 }
 

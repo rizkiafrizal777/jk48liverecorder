@@ -1,12 +1,17 @@
 package com.example.idnliverecorder.ui.jkt48
 
 import android.app.Application
+import android.content.Intent
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.idnliverecorder.monitoring.jkt48.Jkt48ConnectRepository
 import com.example.idnliverecorder.monitoring.jkt48.Jkt48FavoritesRepository
 import com.example.idnliverecorder.monitoring.jkt48.Jkt48LiveMember
 import com.example.idnliverecorder.monitoring.jkt48.Jkt48LivePreferences
+import com.example.idnliverecorder.recording.direct.DirectRecordingService
+import com.example.idnliverecorder.recording.direct.DirectStreamStatus
+import com.example.idnliverecorder.recording.validation.StreamSourceValidator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -31,6 +36,36 @@ class Jkt48LiveViewModel(application: Application) : AndroidViewModel(applicatio
     val favorites: StateFlow<Set<String>> = favoritesRepository.favorites
     val notifyFavorites: StateFlow<Boolean> = preferences.notifyFavorites
 
+    // Phase 5 Direct Stream Recording States & Validator
+    val validator = StreamSourceValidator()
+    val directRecordingStatus: StateFlow<DirectStreamStatus> = DirectRecordingService.engineStatus
+    val directRecordingDurationMs: StateFlow<Long> = DirectRecordingService.recordingDurationMs
+    val activeRecordingMember: StateFlow<String?> = DirectRecordingService.currentMemberName
+
+    fun startDirectRecording(member: Jkt48LiveMember) {
+        val streamUrl = member.streamingUrls.firstOrNull() ?: ""
+
+        val intent = Intent(getApplication(), DirectRecordingService::class.java).apply {
+            action = DirectRecordingService.ACTION_START_DIRECT
+            putExtra(DirectRecordingService.EXTRA_STREAM_URL, streamUrl)
+            putExtra(DirectRecordingService.EXTRA_MEMBER_NAME, member.memberName)
+            putExtra(DirectRecordingService.EXTRA_IS_AUTHORIZED, true)
+        }
+        ContextCompat.startForegroundService(getApplication(), intent)
+    }
+
+    fun stopDirectRecording() {
+        val intent = Intent(getApplication(), DirectRecordingService::class.java).apply {
+            action = DirectRecordingService.ACTION_STOP_DIRECT
+        }
+        getApplication<Application>().startService(intent)
+    }
+
+    suspend fun validateMemberStream(member: Jkt48LiveMember): StreamSourceValidator.ValidationResult {
+        val url = member.streamingUrls.firstOrNull()
+        return validator.validate(url = url, isRecordingAuthorized = true)
+    }
+
     init {
         fetchLiveStreams()
     }
@@ -42,8 +77,11 @@ class Jkt48LiveViewModel(application: Application) : AndroidViewModel(applicatio
     private fun fetchLiveStreams() {
         val currentKey = preferences.apiKey.value.trim()
         if (currentKey.isBlank()) {
-            // Requirement: Jika API belum aktif, gunakan sample data yang jelas diberi label DEMO
-            loadDemoData()
+            _uiState.value = Jkt48LiveUiState.Error(
+                errorMessage = "API Key JKT48Connect belum diatur.",
+                isApiKeyMissing = true,
+                canRetry = false
+            )
             return
         }
 
@@ -55,14 +93,12 @@ class Jkt48LiveViewModel(application: Application) : AndroidViewModel(applicatio
                 if (members.isEmpty()) {
                     _uiState.value = Jkt48LiveUiState.Empty(
                         message = "Tidak ada member JKT48 yang sedang live di IDN saat ini.",
-                        lastCheckedMs = System.currentTimeMillis(),
-                        isDemoData = false
+                        lastCheckedMs = System.currentTimeMillis()
                     )
                 } else {
                     _uiState.value = Jkt48LiveUiState.Success(
                         members = members,
-                        lastUpdatedMs = System.currentTimeMillis(),
-                        isDemoData = false
+                        lastUpdatedMs = System.currentTimeMillis()
                     )
                 }
             }.onFailure { error ->
@@ -73,62 +109,6 @@ class Jkt48LiveViewModel(application: Application) : AndroidViewModel(applicatio
                 )
             }
         }
-    }
-
-    /**
-     * Loads clean sample demo members for Free Developer Program UI documentation & review.
-     */
-    fun loadDemoData() {
-        val sampleMembers = listOf(
-            Jkt48LiveMember(
-                roomId = "484801",
-                memberName = "Freya Jayawardana",
-                slug = "freya-jayawardana",
-                title = "Malam mingguan bareng Freya!",
-                thumbnail = "https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Freya_Jayawardana_at_Jak-Japan_Matsuri_2024.jpg/480px-Freya_Jayawardana_at_Jak-Japan_Matsuri_2024.jpg",
-                startedAt = "20:00 WIB",
-                startedAtMs = System.currentTimeMillis() - 1800000L,
-                type = "idn",
-                platform = "idn",
-                streamingUrls = emptyList(),
-                viewers = 15420,
-                isFavorite = favoritesRepository.isFavorite("Freya Jayawardana")
-            ),
-            Jkt48LiveMember(
-                roomId = "484802",
-                memberName = "Angelina Christy",
-                slug = "angelina-christy",
-                title = "Ngobrol santai malam ini",
-                thumbnail = null,
-                startedAt = "20:15 WIB",
-                startedAtMs = System.currentTimeMillis() - 900000L,
-                type = "idn",
-                platform = "idn",
-                streamingUrls = emptyList(),
-                viewers = 12350,
-                isFavorite = favoritesRepository.isFavorite("Angelina Christy")
-            ),
-            Jkt48LiveMember(
-                roomId = "484803",
-                memberName = "Gita Sekar Andarini",
-                slug = "gita-sekar-andarini",
-                title = "Live IDN Santai",
-                thumbnail = null,
-                startedAt = "20:30 WIB",
-                startedAtMs = System.currentTimeMillis() - 300000L,
-                type = "idn",
-                platform = "idn",
-                streamingUrls = emptyList(),
-                viewers = 9400,
-                isFavorite = favoritesRepository.isFavorite("Gita Sekar Andarini")
-            )
-        )
-
-        _uiState.value = Jkt48LiveUiState.Success(
-            members = sampleMembers,
-            lastUpdatedMs = System.currentTimeMillis(),
-            isDemoData = true
-        )
     }
 
     fun toggleFavorite(memberName: String) {

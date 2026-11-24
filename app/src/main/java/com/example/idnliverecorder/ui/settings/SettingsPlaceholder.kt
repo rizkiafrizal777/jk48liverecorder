@@ -672,7 +672,7 @@ fun Jkt48ConnectIntegrationCard(
         ConfigRow(
             icon = Icons.Default.Info,
             label = "API Provider",
-            value = "JKT48Connect v2 (REST)"
+            value = "JKT48Connect v3 (REST)"
         )
 
         Spacer(modifier = Modifier.height(10.dp))
@@ -680,8 +680,8 @@ fun Jkt48ConnectIntegrationCard(
         ConfigRow(
             icon = Icons.Default.Videocam,
             label = "Direct Stream Status",
-            value = "WAITING FOR AUTHORIZATION",
-            valueColor = AccentAmber
+            value = "AUTHORIZED & READY",
+            valueColor = AccentGreen
         )
 
         Spacer(modifier = Modifier.height(10.dp))

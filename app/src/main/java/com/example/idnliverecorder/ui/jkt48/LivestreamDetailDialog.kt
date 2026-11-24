@@ -73,7 +73,6 @@ import com.example.idnliverecorder.ui.theme.TextTertiary
 @Composable
 fun LivestreamDetailDialog(
     member: Jkt48LiveMember,
-    isDemoData: Boolean,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -85,7 +84,7 @@ fun LivestreamDetailDialog(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(22.dp))
                 .background(SurfaceDark)
-                .border(1.5.dp, if (isDemoData) AccentAmber.copy(alpha = 0.6f) else PrimaryRed, RoundedCornerShape(22.dp))
+                .border(1.5.dp, PrimaryRed, RoundedCornerShape(22.dp))
                 .padding(20.dp)
                 .verticalScroll(scrollState)
         ) {
@@ -125,34 +124,6 @@ fun LivestreamDetailDialog(
             }
 
             Spacer(modifier = Modifier.height(14.dp))
-
-            // Demo Badge if this is simulation/demo data
-            if (isDemoData) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(AccentAmber.copy(alpha = 0.15f))
-                        .border(1.dp, AccentAmber.copy(alpha = 0.3f), RoundedCornerShape(10.dp))
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "DEMO / SAMPLE DATA",
-                            color = AccentAmber,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Sampel untuk peninjauan Free Developer Program",
-                            color = TextSecondary,
-                            fontSize = 10.sp
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(12.dp))
-            }
 
             // Thumbnail / Avatar Presentation
             Box(
@@ -352,6 +323,18 @@ fun LivestreamDetailDialog(
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 DetailItemRow(
+                    label = "Stream Availability",
+                    value = if (member.streamingUrls.isNotEmpty()) "SOURCE AVAILABLE" else "SOURCE UNAVAILABLE",
+                    valueColor = if (member.streamingUrls.isNotEmpty()) AccentGreen else TextTertiary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                DetailItemRow(
+                    label = "Recording Status",
+                    value = if (member.streamingUrls.isNotEmpty()) "READY TO RECORD" else "SOURCE UNAVAILABLE",
+                    valueColor = if (member.streamingUrls.isNotEmpty()) AccentGreen else TextTertiary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                DetailItemRow(
                     label = "Streaming Quality",
                     value = if (member.streamingUrls.isNotEmpty()) "${member.streamingUrls.size} Stream profile(s)" else "Auto (Adaptive)"
                 )
@@ -410,7 +393,7 @@ fun LivestreamDetailDialog(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "Sumber Data: JKT48Connect API (v2.jkt48connect.com)",
+                    text = "Sumber Data: JKT48Connect API (v3.jkt48connect.com)",
                     color = TextTertiary,
                     fontSize = 11.sp
                 )

@@ -45,3 +45,4 @@ class ScreenCaptureRecordingSourceProvider(
         _currentStatus.value = DirectStreamStatus.SOURCE_AVAILABLE
     }
 }
+

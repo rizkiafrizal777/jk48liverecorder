@@ -4,6 +4,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("com.google.devtools.ksp")
 }
 
 val localProperties = Properties().apply {
@@ -89,6 +90,16 @@ dependencies {
 
     // Image Loading for Jetpack Compose (Phase 4A)
     implementation("io.coil-kt:coil-compose:2.7.0")
+
+    // Media3 ExoPlayer for Internal Playback (Phase 6)
+    implementation("androidx.media3:media3-exoplayer:1.5.1")
+    implementation("androidx.media3:media3-ui:1.5.1")
+
+    // Room Database (Phase 7)
+    val roomVersion = "2.6.1"
+    implementation("androidx.room:room-runtime:$roomVersion")
+    implementation("androidx.room:room-ktx:$roomVersion")
+    ksp("androidx.room:room-compiler:$roomVersion")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.mockito:mockito-core:5.14.2")

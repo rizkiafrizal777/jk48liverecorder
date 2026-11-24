@@ -7,7 +7,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.idnliverecorder.data.AppInfo
 import com.example.idnliverecorder.data.DetectedLiveItem
-import com.example.idnliverecorder.data.DetectionStatus
 import com.example.idnliverecorder.data.RecordedVideoItem
 import com.example.idnliverecorder.monitoring.LiveDetectionManager
 import com.example.idnliverecorder.monitoring.LiveDetectionRepository
@@ -15,11 +14,9 @@ import com.example.idnliverecorder.monitoring.LiveDetectionSettings
 import com.example.idnliverecorder.monitoring.LiveDetectionSettingsData
 import com.example.idnliverecorder.recording.EncoderValidator
 import com.example.idnliverecorder.recording.RecordingConfig
-import com.example.idnliverecorder.recording.RecordingManager
-import com.example.idnliverecorder.recording.RecordingState
-import com.example.idnliverecorder.recording.ScreenRecordingService
-import com.example.idnliverecorder.recording.source.LiveSourceCapabilities
-import com.example.idnliverecorder.recording.source.LiveSourceType
+import com.example.idnliverecorder.recording.RecordingEventBridge
+import com.example.idnliverecorder.recording.direct.DirectRecordingService
+import com.example.idnliverecorder.recording.direct.DirectStreamStatus
 import com.example.idnliverecorder.storage.MediaStoreRecorderStorage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,13 +29,9 @@ import kotlinx.coroutines.launch
 
 class DashboardViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val recordingManager = RecordingManager(application)
     private val detectionManager = LiveDetectionManager.getInstance(application)
     private val detectionSettings = LiveDetectionSettings.getInstance(application)
     private val detectionRepository = LiveDetectionRepository.getInstance(application)
-
-    // Phase 1 Recording States
-    val recordingState: StateFlow<RecordingState> = ScreenRecordingService.recordingState
 
     private val _recentRecordings = MutableStateFlow<List<RecordedVideoItem>>(emptyList())
     val recentRecordings: StateFlow<List<RecordedVideoItem>> = _recentRecordings.asStateFlow()
@@ -50,7 +43,6 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     val settingsFlow: StateFlow<LiveDetectionSettingsData> = detectionSettings.settingsFlow
     val isNotificationAccessGranted: StateFlow<Boolean> = detectionManager.isPermissionGranted
     val recentDetections: StateFlow<List<DetectedLiveItem>> = detectionRepository.recentDetections
-    val activeConfirmation: StateFlow<DetectedLiveItem?> = detectionRepository.activeConfirmation
     val todayDetectionCount: StateFlow<Int> = detectionRepository.todayDetectionCount
 
     val isLiveDetectionActive: StateFlow<Boolean> = combine(
@@ -71,15 +63,17 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         refreshRecordings()
         refreshPermissions()
 
-        // Auto-refresh recordings when recording completes
+        // Auto-refresh recordings when direct stream recording completes (Phase 7-8 Reliability)
         viewModelScope.launch {
-            recordingState.collect { state ->
-                if (state is RecordingState.Saved) {
+            RecordingEventBridge.recordingCompletedEvents.collect { event ->
+                refreshRecordings()
+            }
+        }
+
+        viewModelScope.launch {
+            DirectRecordingService.engineStatus.collect { status ->
+                if (status == DirectStreamStatus.COMPLETED) {
                     refreshRecordings()
-                    // If we had an active recording session for a live streamer, update detection status
-                    activeConfirmation.value?.let { active ->
-                        detectionRepository.updateDetectionStatus(active.id, DetectionStatus.Recording)
-                    }
                 }
             }
         }
@@ -92,41 +86,10 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    // Phase 4 Source Selection States
-    val availableSources: List<LiveSourceCapabilities> = listOf(
-        LiveSourceCapabilities.forFullScreen(),
-        LiveSourceCapabilities.forOfficialStream()
-    )
-    private val _selectedSource = MutableStateFlow<LiveSourceType>(LiveSourceType.FullScreenRecording)
-    val selectedSource: StateFlow<LiveSourceType> = _selectedSource.asStateFlow()
-
-    fun selectSource(type: LiveSourceType) {
-        _selectedSource.value = type
-    }
-
-    // Recording Controls (Phase 1, 3 & 4)
-    fun startRecording(resultCode: Int, resultData: Intent) {
-        val streamerName = activeConfirmation.value?.streamerName
-        activeConfirmation.value?.let { active ->
-            detectionRepository.updateDetectionStatus(active.id, DetectionStatus.Recording)
-        }
-        recordingManager.startRecording(resultCode, resultData, streamerName)
-    }
-
-    fun stopRecording() {
-        recordingManager.stopRecording()
-    }
-
     fun refreshRecordings() {
         viewModelScope.launch(Dispatchers.IO) {
             val list = MediaStoreRecorderStorage.fetchRecentRecordings(getApplication())
             _recentRecordings.value = list
-        }
-    }
-
-    fun dismissStatus() {
-        if (recordingState.value is RecordingState.Saved || recordingState.value is RecordingState.Error) {
-            ScreenRecordingService.updateState(RecordingState.Idle)
         }
     }
 
@@ -190,25 +153,4 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun handleViewDetectionIntent(detectionId: String) {
-        val match = recentDetections.value.firstOrNull { it.id == detectionId }
-        if (match != null) {
-            detectionRepository.setActiveConfirmation(match)
-        }
-        detectionManager.dismissDetectionNotification()
-    }
-
-    fun confirmLiveRecording(detectionItem: DetectedLiveItem, onLaunchConsent: () -> Unit) {
-        detectionManager.dismissDetectionNotification()
-        onLaunchConsent()
-    }
-
-    fun dismissLiveConfirmation(detectionItem: DetectedLiveItem) {
-        detectionRepository.updateDetectionStatus(detectionItem.id, DetectionStatus.Ignored)
-        detectionManager.dismissDetectionNotification()
-    }
-
-    fun simulateTestDetection(streamerName: String = "Freya") {
-        detectionManager.simulateTestDetection(streamerName)
-    }
 }

@@ -65,7 +65,6 @@ fun LiveDetectionStatusCard(
     todayCount: Int,
     latestDetection: DetectedLiveItem?,
     onOpenSettings: () -> Unit,
-    onSimulateTest: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
@@ -285,22 +284,6 @@ fun LiveDetectionStatusCard(
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold
                         )
-                        if (latestDetection.isSimulation) {
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(AccentAmber.copy(alpha = 0.2f))
-                                    .padding(horizontal = 5.dp, vertical = 1.dp)
-                            ) {
-                                Text(
-                                    text = "SIMULASI",
-                                    color = AccentAmber,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
                     }
                     Text(
                         text = latestDetection.detectedAtMs.formatDate(),
@@ -320,29 +303,11 @@ fun LiveDetectionStatusCard(
             Spacer(modifier = Modifier.height(12.dp))
         }
 
-        // Action helper buttons: Test simulation & Settings
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            OutlinedButton(
-                onClick = onSimulateTest,
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(10.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = AccentCyan)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.BugReport,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(text = "Tes Simulasi", fontSize = 12.sp)
-            }
-
+        // Detection settings shortcut
+        Row(modifier = Modifier.fillMaxWidth()) {
             OutlinedButton(
                 onClick = onOpenSettings,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(10.dp),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = TextSecondary)
             ) {

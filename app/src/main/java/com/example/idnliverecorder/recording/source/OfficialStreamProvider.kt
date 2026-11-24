@@ -31,7 +31,7 @@ class OfficialStreamProvider(
 
     override val type: LiveSourceType = LiveSourceType.OfficialLiveStream
 
-    override val capabilities: LiveSourceCapabilities = LiveSourceCapabilities.forOfficialStream()
+    override val capabilities: LiveSourceCapabilities = LiveSourceCapabilities.forOfficialStream(isAuthorizedIntegrationActive)
 
     override val isVideoSourceActive: Boolean = false
     override val isAudioSourceActive: Boolean = false

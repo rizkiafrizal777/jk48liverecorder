@@ -33,10 +33,10 @@ data class LiveSourceCapabilities(
             )
         }
 
-        fun forOfficialStream(): LiveSourceCapabilities {
+        fun forOfficialStream(isAuthorized: Boolean = false): LiveSourceCapabilities {
             return LiveSourceCapabilities(
                 type = LiveSourceType.OfficialLiveStream,
-                isAvailableOnDevice = false, // Never claimed available without authorized integration
+                isAvailableOnDevice = isAuthorized,
                 minSdk = Build.VERSION_CODES.Q,
                 requiresMediaProjection = false,
                 supportsBackgroundRecording = true,
@@ -44,7 +44,11 @@ data class LiveSourceCapabilities(
                 recordsUiElements = false,
                 displayName = "Direct Stream Integration",
                 description = "Direct stream capture via official IDN SDK / partner API without recording the device screen.",
-                availabilityNotice = "WAITING FOR AUTHORIZATION — Fitur direct stream belum diaktifkan karena masih menunggu persetujuan akses dan ketentuan penggunaan."
+                availabilityNotice = if (isAuthorized) {
+                    "Tersedia & Terotorisasi — Siap merekam direct stream di latar belakang tanpa merekam layar."
+                } else {
+                    "WAITING FOR AUTHORIZATION — Fitur direct stream belum diaktifkan karena masih menunggu persetujuan akses dan ketentuan penggunaan."
+                }
             )
         }
 

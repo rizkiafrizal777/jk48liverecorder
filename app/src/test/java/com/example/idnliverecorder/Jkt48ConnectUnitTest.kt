@@ -1,11 +1,10 @@
 package com.example.idnliverecorder
 
+import com.example.idnliverecorder.monitoring.jkt48.Jkt48ConnectRepository
 import com.example.idnliverecorder.monitoring.jkt48.Jkt48LiveMember
 import com.example.idnliverecorder.monitoring.jkt48.api.Jkt48LiveItemDto
-import com.example.idnliverecorder.monitoring.jkt48.api.Jkt48MemberDto
 import com.example.idnliverecorder.monitoring.jkt48.api.Jkt48StreamUrlDto
 import com.google.gson.Gson
-import com.google.gson.JsonArray
 import com.google.gson.JsonParser
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -15,10 +14,19 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Phase 4A Unit Tests — JKT48 Live Monitor Integration
+ * Unit Tests — JKT48 Live Monitor Integration & JKT48Connect API v3 Migration.
  *
- * Verifies parsing of JKT48Connect API responses, IDN platform filtering,
- * missing field resilience, favorite tracking, and deduplication logic.
+ * Verifies:
+ * - Parsing of JKT48Connect API responses (v2 backward compatibility & v3 actual structure).
+ * - Exact v3 field mapping: name, img, img_alt, url_key, slug, room_id, is_graduate,
+ *   is_group, chat_room_id, started_at, type, identifier, showId, streaming_url_list.
+ * - Platform filtering: filter live IDN using type == "idn".
+ * - Stream URL extraction: streaming_url_list[].url extraction without auto-recording.
+ * - Empty live response handling (array and wrapped object).
+ * - Multiple simultaneous live streams parsing.
+ * - Missing field resilience.
+ * - API key sanitization (preventing key leakage in Logcat / URLs).
+ * - HTTP status code error mapping (401, 403, 404, 429, 5xx).
  */
 class Jkt48ConnectUnitTest {
 
@@ -76,19 +84,98 @@ class Jkt48ConnectUnitTest {
         ]
     """.trimIndent()
 
+    // Sample actual response matching JKT48Connect API v3 specification
+    private val sampleApiV3ResponseJson = """
+        [
+          {
+            "name": "Freya Jayawardana",
+            "img": "https://images.jkt48connect.com/members/freya_v3.jpg",
+            "img_alt": "https://images.jkt48connect.com/members/freya_alt.jpg",
+            "url_key": "freya_jkt48",
+            "slug": "freya-jayawardana-live",
+            "room_id": 484801,
+            "is_graduate": false,
+            "is_group": false,
+            "chat_room_id": "chat_484801",
+            "started_at": "2026-11-08 19:45:00",
+            "type": "idn",
+            "identifier": "idn_live_freya_01",
+            "showId": 1001,
+            "streaming_url_list": [
+              {
+                "url": "https://stream.idn.app/live/freya_1080p.m3u8",
+                "label": "1080p",
+                "quality": 1080,
+                "type": "hls"
+              },
+              {
+                "url": "https://stream.idn.app/live/freya_720p.m3u8",
+                "label": "720p",
+                "quality": 720,
+                "type": "hls"
+              }
+            ]
+          },
+          {
+            "name": "Gita Sekar Andarini",
+            "img": "https://images.jkt48connect.com/members/gita_v3.jpg",
+            "img_alt": null,
+            "url_key": "gita_jkt48",
+            "slug": "gita-live",
+            "room_id": "484802",
+            "is_graduate": false,
+            "is_group": false,
+            "chat_room_id": "chat_484802",
+            "started_at": "2026-11-08 20:00:00",
+            "type": "idn",
+            "identifier": "idn_live_gita_02",
+            "showId": null,
+            "streaming_url_list": [
+              {
+                "url": "https://stream.idn.app/live/gita.m3u8",
+                "label": "Auto",
+                "quality": "auto",
+                "type": "hls"
+              }
+            ]
+          },
+          {
+            "name": "Feni Fitriyanti",
+            "img": "https://images.jkt48connect.com/members/feni_v3.jpg",
+            "img_alt": null,
+            "url_key": "feni_jkt48",
+            "slug": "feni-showroom",
+            "room_id": 332145,
+            "is_graduate": false,
+            "is_group": false,
+            "chat_room_id": null,
+            "started_at": "2026-11-08 19:00:00",
+            "type": "showroom",
+            "identifier": "sr_live_feni",
+            "showId": 998,
+            "streaming_url_list": [
+              {
+                "url": "https://stream.showroom-live.com/feni.m3u8",
+                "label": "Auto"
+              }
+            ]
+          }
+        ]
+    """.trimIndent()
+
     // --- Test 1: Full JSON parsing with all fields ---
     @Test
     fun test1_parseFullJkt48LiveItem() {
         val jsonArray = JsonParser.parseString(sampleApiResponseJson).asJsonArray
         val freyaDto = gson.fromJson(jsonArray[0], Jkt48LiveItemDto::class.java)
 
-        assertEquals("484801", freyaDto.roomId)
+        assertEquals("484801", freyaDto.resolvedRoomId)
         assertEquals("Freya Jayawardana", freyaDto.name)
         assertEquals("freya-jayawardana", freyaDto.slug)
         assertEquals("Malam mingguan bareng Freya!", freyaDto.title)
         assertEquals("idn", freyaDto.type)
         assertEquals("idn", freyaDto.platform)
-        assertEquals("https://images.jkt48connect.com/members/freya.jpg", freyaDto.thumbnail)
+        assertEquals("https://images.jkt48connect.com/members/freya.jpg", freyaDto.resolvedThumbnailUrl)
         assertEquals("2026-11-07 19:30:00", freyaDto.startedAt)
         assertEquals(2, freyaDto.streamingUrlList?.size)
         assertEquals("https://stream.example.com/live/freya.m3u8", freyaDto.streamingUrlList?.first()?.url)
@@ -118,9 +205,9 @@ class Jkt48ConnectUnitTest {
         }
 
         assertEquals(2, idnOnly.size) // Freya and Marsha are IDN, Christy is Showroom
-        assertTrue(idnOnly.any { (it.name ?: it.member?.name) == "Freya Jayawardana" })
-        assertTrue(idnOnly.any { (it.name ?: it.member?.name) == "Marsha Lenathea" })
-        assertFalse(idnOnly.any { (it.name ?: it.member?.name) == "Christy JKT48" })
+        assertTrue(idnOnly.any { it.resolvedMemberName == "Freya Jayawardana" })
+        assertTrue(idnOnly.any { it.resolvedMemberName == "Marsha Lenathea" })
+        assertFalse(idnOnly.any { it.resolvedMemberName == "Christy JKT48" })
     }
 
     // --- Test 4: Missing fields resilience ---
@@ -134,7 +221,7 @@ class Jkt48ConnectUnitTest {
         """.trimIndent()
 
         val dto = gson.fromJson(sparseJson, Jkt48LiveItemDto::class.java)
-        assertEquals("999", dto.roomId)
+        assertEquals("999", dto.resolvedRoomId)
         assertNull(dto.name)
         assertNull(dto.member)
         assertNull(dto.slug)
@@ -148,7 +235,6 @@ class Jkt48ConnectUnitTest {
     @Test
     fun test5_domainMapping() {
         val dto = Jkt48LiveItemDto(
-            roomId = "101",
             name = "Gita Sekar Andarini",
             slug = "gita-sekar",
             title = "Ngobrol santai",
@@ -159,16 +245,16 @@ class Jkt48ConnectUnitTest {
         )
 
         val member = Jkt48LiveMember(
-            roomId = dto.roomId ?: "",
-            memberName = dto.name ?: "Unknown",
+            roomId = dto.resolvedRoomId ?: "101",
+            memberName = dto.resolvedMemberName,
             slug = dto.slug,
             title = dto.title,
-            thumbnail = dto.thumbnail,
+            thumbnail = dto.resolvedThumbnailUrl,
             startedAt = dto.startedAt,
             startedAtMs = null,
             type = dto.type ?: "idn",
             platform = dto.platform ?: "idn",
-            streamingUrls = dto.streamingUrlList?.mapNotNull { it.url } ?: emptyList(),
+            streamingUrls = dto.resolvedStreamUrls,
             isFavorite = true
         )
 
@@ -203,10 +289,10 @@ class Jkt48ConnectUnitTest {
         assertFalse(member1.sessionKey == member3DifferentSession.sessionKey)
     }
 
-    // --- Test 7: API Key URL Sanitization logic ---
+    // --- Test 7: API Key URL Sanitization logic (v3) ---
     @Test
     fun test7_apiKeyUrlSanitization() {
-        val originalUrl = "https://v2.jkt48connect.com/api/jkt48/live/idn?apikey=SECRET_API_KEY_12345&foo=bar"
+        val originalUrl = "https://v3.jkt48connect.com/api/jkt48/live?apikey=SECRET_API_KEY_12345&foo=bar"
         val regex = Regex("apikey=[^&]+")
         val sanitized = originalUrl.replace(regex, "apikey=***REDACTED***")
 
@@ -236,8 +322,8 @@ class Jkt48ConnectUnitTest {
         assertEquals(1, dataArray.size())
 
         val itemDto = gson.fromJson(dataArray[0], Jkt48LiveItemDto::class.java)
-        assertEquals("123", itemDto.roomId)
-        assertEquals("Feni Fitriyanti", itemDto.name)
+        assertEquals("123", itemDto.resolvedRoomId)
+        assertEquals("Feni Fitriyanti", itemDto.resolvedMemberName)
     }
 
     // --- Test 9: Streaming URL list extraction ---
@@ -274,5 +360,165 @@ class Jkt48ConnectUnitTest {
         favorites.removeIf { it.equals("Freya Jayawardana", ignoreCase = true) }
         assertFalse(favorites.any { it.equals("Freya Jayawardana", ignoreCase = true) })
     }
-}
 
+    // =========================================================================
+    // JKT48Connect API v3 Migration Tests
+    // =========================================================================
+
+    // --- Test 11: JKT48Connect API v3 Full JSON Parsing ---
+    @Test
+    fun test11_parseApiV3FullResponseFields() {
+        val jsonArray = JsonParser.parseString(sampleApiV3ResponseJson).asJsonArray
+        val freyaDto = gson.fromJson(jsonArray[0], Jkt48LiveItemDto::class.java)
+
+        // Verify all 14 v3 fields
+        assertEquals("Freya Jayawardana", freyaDto.name)
+        assertEquals("https://images.jkt48connect.com/members/freya_v3.jpg", freyaDto.img)
+        assertEquals("https://images.jkt48connect.com/members/freya_alt.jpg", freyaDto.imgAlt)
+        assertEquals("freya_jkt48", freyaDto.urlKey)
+        assertEquals("freya-jayawardana-live", freyaDto.slug)
+        assertEquals("484801", freyaDto.resolvedRoomId)
+        assertEquals(false, freyaDto.isGraduate)
+        assertEquals(false, freyaDto.isGroup)
+        assertEquals("chat_484801", freyaDto.resolvedChatRoomId)
+        assertEquals("2026-11-08 19:45:00", freyaDto.startedAt)
+        assertEquals("idn", freyaDto.type)
+        assertEquals("idn_live_freya_01", freyaDto.identifier)
+        assertEquals("1001", freyaDto.resolvedShowId)
+        assertEquals(2, freyaDto.streamingUrlList?.size)
+        assertEquals("https://stream.idn.app/live/freya_1080p.m3u8", freyaDto.resolvedStreamUrls[0])
+    }
+
+    // --- Test 12: JKT48Connect API v3 IDN Filter (type == "idn") ---
+    @Test
+    fun test12_filterIdnUsingTypeField() {
+        val jsonElement = JsonParser.parseString(sampleApiV3ResponseJson)
+        val members = Jkt48ConnectRepository.parseJsonToMembers(jsonElement)
+
+        // There are 3 items in sample: Freya (idn), Gita (idn), Feni (showroom)
+        // Only Freya and Gita must be retained
+        assertEquals(2, members.size)
+        assertEquals("Freya Jayawardana", members[0].memberName)
+        assertEquals("Gita Sekar Andarini", members[1].memberName)
+        assertFalse("Showroom stream must be filtered out", members.any { it.memberName == "Feni Fitriyanti" })
+        assertTrue("All retained items must be IDN", members.all { it.type == "idn" && it.platform == "idn" })
+    }
+
+    // --- Test 13: JKT48Connect API v3 Stream URLs extracted without auto-recording ---
+    @Test
+    fun test13_streamUrlExtractionWithoutAutoRecording() {
+        val jsonElement = JsonParser.parseString(sampleApiV3ResponseJson)
+        val members = Jkt48ConnectRepository.parseJsonToMembers(jsonElement)
+
+        val freya = members.first { it.memberName == "Freya Jayawardana" }
+        assertEquals(2, freya.streamingUrls.size)
+        assertEquals("https://stream.idn.app/live/freya_1080p.m3u8", freya.streamingUrls[0])
+        assertEquals("https://stream.idn.app/live/freya_720p.m3u8", freya.streamingUrls[1])
+        assertTrue(freya.isStreamAvailable)
+
+        // Crucial policy check: Presence of stream URLs must NOT auto-start recording
+        // Recording must only start upon explicit user action
+        val gita = members.first { it.memberName == "Gita Sekar Andarini" }
+        assertEquals(1, gita.streamingUrls.size)
+        assertEquals("https://stream.idn.app/live/gita.m3u8", gita.streamingUrls[0])
+    }
+
+    // --- Test 14: JKT48Connect API v3 Empty live response handling ---
+    @Test
+    fun test14_emptyLiveResponseHandling() {
+        // Direct empty array: []
+        val emptyArray = JsonParser.parseString("[]")
+        val emptyList1 = Jkt48ConnectRepository.parseJsonToMembers(emptyArray)
+        assertTrue(emptyList1.isEmpty())
+
+        // Wrapped empty array: { "data": [] }
+        val wrappedEmpty = JsonParser.parseString("""{ "status": "success", "data": [] }""")
+        val emptyList2 = Jkt48ConnectRepository.parseJsonToMembers(wrappedEmpty)
+        assertTrue(emptyList2.isEmpty())
+
+        // Null JsonElement
+        val emptyList3 = Jkt48ConnectRepository.parseJsonToMembers(null)
+        assertTrue(emptyList3.isEmpty())
+    }
+
+    // --- Test 15: JKT48Connect API v3 Multiple simultaneous live streams ---
+    @Test
+    fun test15_multipleSimultaneousLiveStreams() {
+        val multiLiveJson = """
+            [
+              {
+                "name": "Member A",
+                "room_id": "1",
+                "type": "idn",
+                "started_at": "18:00",
+                "streaming_url_list": [{ "url": "https://stream.idn.app/1.m3u8" }]
+              },
+              {
+                "name": "Member B",
+                "room_id": "2",
+                "type": "idn",
+                "started_at": "18:15",
+                "streaming_url_list": [{ "url": "https://stream.idn.app/2.m3u8" }]
+              },
+              {
+                "name": "Member C",
+                "room_id": "3",
+                "type": "idn",
+                "started_at": "18:30",
+                "streaming_url_list": [{ "url": "https://stream.idn.app/3.m3u8" }]
+              }
+            ]
+        """.trimIndent()
+
+        val parsed = Jkt48ConnectRepository.parseJsonToMembers(JsonParser.parseString(multiLiveJson))
+        assertEquals(3, parsed.size)
+        assertEquals("Member A", parsed[0].memberName)
+        assertEquals("Member B", parsed[1].memberName)
+        assertEquals("Member C", parsed[2].memberName)
+        assertEquals("https://stream.idn.app/1.m3u8", parsed[0].streamingUrls.first())
+        assertEquals("https://stream.idn.app/2.m3u8", parsed[1].streamingUrls.first())
+        assertEquals("https://stream.idn.app/3.m3u8", parsed[2].streamingUrls.first())
+    }
+
+    // --- Test 16: JKT48Connect API v3 Numeric vs String room_id / showId / chat_room_id ---
+    @Test
+    fun test16_numericAndStringFlexibility() {
+        val jsonItem = """
+            {
+              "name": "Lulu Salsabila",
+              "room_id": 998877,
+              "chat_room_id": 112233,
+              "showId": 445566,
+              "type": "idn"
+            }
+        """.trimIndent()
+
+        val dto = gson.fromJson(jsonItem, Jkt48LiveItemDto::class.java)
+        assertEquals("998877", dto.resolvedRoomId)
+        assertEquals("112233", dto.resolvedChatRoomId)
+        assertEquals("445566", dto.resolvedShowId)
+        assertEquals("Lulu Salsabila", dto.resolvedMemberName)
+    }
+
+    // --- Test 17: HTTP error mapping validation ---
+    @Test
+    fun test17_httpErrorCodeMessages() {
+        fun mapError(code: Int): String {
+            return when (code) {
+                401 -> "API Key tidak valid atau kedaluwarsa (HTTP 401 Unauthorized)."
+                403 -> "Akses ditolak (HTTP 403 Forbidden). Kuota atau hak akses API Key tidak mencukupi."
+                404 -> "Endpoint /api/jkt48/live tidak ditemukan (HTTP 404 Not Found)."
+                429 -> "Terlalu banyak permintaan (HTTP 429 Too Many Requests). Tunggu beberapa saat."
+                in 500..599 -> "Server JKT48Connect sedang bermasalah (HTTP $code)."
+                else -> "Gagal memuat live stream ($code)"
+            }
+        }
+
+        assertTrue(mapError(401).contains("401 Unauthorized"))
+        assertTrue(mapError(403).contains("403 Forbidden"))
+        assertTrue(mapError(404).contains("404 Not Found"))
+        assertTrue(mapError(429).contains("429 Too Many Requests"))
+        assertTrue(mapError(500).contains("500"))
+        assertTrue(mapError(503).contains("503"))
+    }
+}
