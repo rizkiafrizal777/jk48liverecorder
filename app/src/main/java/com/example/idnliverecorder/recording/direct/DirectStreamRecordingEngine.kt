@@ -28,6 +28,7 @@ import java.nio.ByteBuffer
 import java.util.Collections
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -46,11 +47,7 @@ class DirectStreamRecordingEngine(
     private val context: Context,
     private val streamUrl: String,
     private val memberName: String,
-    private val httpClient: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
-        .callTimeout(30, TimeUnit.SECONDS)
-        .build(),
+    private val httpClient: OkHttpClient = sharedHttpClient,
     private val onStatusChanged: (DirectStreamStatus, String) -> Unit = { _, _ -> }
 ) {
 
@@ -65,6 +62,11 @@ class DirectStreamRecordingEngine(
         private const val BUFFER_SIZE = 1024 * 1024 // 1MB buffer for demuxing
         private const val MAX_TRACKED_SEGMENTS = 4096
         private const val MAX_SEGMENT_BYTES = 128L * 1024L * 1024L
+        private val sharedHttpClient = OkHttpClient.Builder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .callTimeout(30, TimeUnit.SECONDS)
+            .build()
 
         fun getFirstBytesHex(file: File, count: Int = 16): String {
             return try {
@@ -147,7 +149,7 @@ class DirectStreamRecordingEngine(
     )
 
     private val pendingSegmentsBeforeStart = Collections.synchronizedList(mutableListOf<PendingSegment>())
-    private val cacheDir = File(context.cacheDir, "hls_direct_recording_${System.currentTimeMillis()}")
+    private val cacheDir = File(context.cacheDir, "hls_direct_recording_${UUID.randomUUID()}")
     private var cachedInitSegmentFile: File? = null
     private var cachedAudioInitSegmentFile: File? = null
     private var audioPlaylistUrl: String? = null

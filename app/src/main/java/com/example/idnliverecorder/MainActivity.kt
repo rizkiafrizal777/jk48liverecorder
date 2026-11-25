@@ -46,9 +46,7 @@ class MainActivity : ComponentActivity() {
                     // Phase 4A & 5 JKT48 Live Monitor & Direct Recording states
                     val jkt48UiState by jkt48ViewModel.uiState.collectAsStateWithLifecycle()
                     val jkt48ApiKey by jkt48ViewModel.apiKey.collectAsStateWithLifecycle()
-                    val directRecordingStatus by jkt48ViewModel.directRecordingStatus.collectAsStateWithLifecycle()
-                    val directRecordingDurationMs by jkt48ViewModel.directRecordingDurationMs.collectAsStateWithLifecycle()
-                    val activeRecordingMember by jkt48ViewModel.activeRecordingMember.collectAsStateWithLifecycle()
+                    val recordingSessions by jkt48ViewModel.recordingSessions.collectAsStateWithLifecycle()
 
                     DashboardScreen(
                         isPermissionGranted = isPermissionGranted,
@@ -60,11 +58,9 @@ class MainActivity : ComponentActivity() {
                         onRefreshJkt48 = { jkt48ViewModel.refresh() },
                         onToggleFavoriteJkt48 = { name -> jkt48ViewModel.toggleFavorite(name) },
                         onSaveJkt48ApiKey = { key -> jkt48ViewModel.saveApiKey(key) },
-                        directRecordingStatus = directRecordingStatus,
-                        directRecordingDurationMs = directRecordingDurationMs,
-                        activeRecordingMember = activeRecordingMember,
+                        recordingSessions = recordingSessions,
                         onStartDirectRecording = { member -> jkt48ViewModel.startDirectRecording(member) },
-                        onStopDirectRecording = { jkt48ViewModel.stopDirectRecording() },
+                        onStopDirectRecording = { sessionId -> jkt48ViewModel.stopDirectRecording(sessionId) },
                         libraryViewModel = libraryViewModel,
                         selectedTab = selectedTabState.intValue,
                         onTabSelected = { selectedTabState.intValue = it },

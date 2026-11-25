@@ -14,6 +14,7 @@ import com.example.idnliverecorder.data.RecordedVideoItem
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 object MediaStoreRecorderStorage {
     private const val TAG = "MediaStoreStorage"
@@ -60,9 +61,10 @@ object MediaStoreRecorderStorage {
      */
     fun createPendingDirectVideo(context: Context, memberName: String): OutputSession {
         val resolver = context.contentResolver
-        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.getDefault()).format(Date())
         val sanitizedMember = memberName.replace("[^a-zA-Z0-9]".toRegex(), "_").trim('_')
-        val displayName = "JKT48_${sanitizedMember}_${timeStamp}.mp4"
+        val uniqueSuffix = UUID.randomUUID().toString().take(8)
+        val displayName = "JKT48_${sanitizedMember}_${timeStamp}_${uniqueSuffix}.mp4"
 
         val values = ContentValues().apply {
             put(MediaStore.Video.Media.DISPLAY_NAME, displayName)

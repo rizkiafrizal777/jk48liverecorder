@@ -10,7 +10,6 @@ import com.example.idnliverecorder.monitoring.jkt48.Jkt48FavoritesRepository
 import com.example.idnliverecorder.monitoring.jkt48.Jkt48LiveMember
 import com.example.idnliverecorder.monitoring.jkt48.Jkt48LivePreferences
 import com.example.idnliverecorder.recording.direct.DirectRecordingService
-import com.example.idnliverecorder.recording.direct.DirectStreamStatus
 import com.example.idnliverecorder.recording.validation.StreamSourceValidator
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -43,9 +42,7 @@ class Jkt48LiveViewModel(application: Application) : AndroidViewModel(applicatio
 
     // Phase 5 Direct Stream Recording States & Validator
     val validator = StreamSourceValidator()
-    val directRecordingStatus: StateFlow<DirectStreamStatus> = DirectRecordingService.engineStatus
-    val directRecordingDurationMs: StateFlow<Long> = DirectRecordingService.recordingDurationMs
-    val activeRecordingMember: StateFlow<String?> = DirectRecordingService.currentMemberName
+    val recordingSessions = DirectRecordingService.recordingSessions
     private var fetchJob: Job? = null
 
     fun startDirectRecording(member: Jkt48LiveMember) {
@@ -53,15 +50,17 @@ class Jkt48LiveViewModel(application: Application) : AndroidViewModel(applicatio
 
         val intent = Intent(getApplication(), DirectRecordingService::class.java).apply {
             action = DirectRecordingService.ACTION_START_DIRECT
+            putExtra(DirectRecordingService.EXTRA_SESSION_ID, member.sessionKey)
             putExtra(DirectRecordingService.EXTRA_STREAM_URL, streamUrl)
             putExtra(DirectRecordingService.EXTRA_MEMBER_NAME, member.memberName)
         }
         ContextCompat.startForegroundService(getApplication(), intent)
     }
 
-    fun stopDirectRecording() {
+    fun stopDirectRecording(sessionId: String? = null) {
         val intent = Intent(getApplication(), DirectRecordingService::class.java).apply {
             action = DirectRecordingService.ACTION_STOP_DIRECT
+            sessionId?.let { putExtra(DirectRecordingService.EXTRA_SESSION_ID, it) }
         }
         getApplication<Application>().startService(intent)
     }

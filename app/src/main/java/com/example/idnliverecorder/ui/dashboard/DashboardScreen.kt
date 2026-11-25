@@ -72,7 +72,7 @@ import com.example.idnliverecorder.library.ui.RecordingLibraryScreen
 import com.example.idnliverecorder.library.ui.RecordingLibraryViewModel
 import com.example.idnliverecorder.monitoring.LiveDetectionSettingsData
 import com.example.idnliverecorder.monitoring.jkt48.Jkt48LiveMember
-import com.example.idnliverecorder.recording.direct.DirectStreamStatus
+import com.example.idnliverecorder.recording.direct.DirectRecordingSessionState
 import com.example.idnliverecorder.ui.jkt48.Jkt48LiveMonitorScreen
 import com.example.idnliverecorder.ui.jkt48.Jkt48LiveUiState
 import com.example.idnliverecorder.ui.settings.AppSelectionDialog
@@ -102,11 +102,9 @@ fun DashboardScreen(
     onRefreshJkt48: () -> Unit,
     onToggleFavoriteJkt48: (String) -> Unit,
     onSaveJkt48ApiKey: (String) -> Unit,
-    directRecordingStatus: DirectStreamStatus = DirectStreamStatus.SOURCE_UNAVAILABLE,
-    directRecordingDurationMs: Long = 0L,
-    activeRecordingMember: String? = null,
+    recordingSessions: List<DirectRecordingSessionState> = emptyList(),
     onStartDirectRecording: (Jkt48LiveMember) -> Unit = {},
-    onStopDirectRecording: () -> Unit = {},
+    onStopDirectRecording: (String) -> Unit = {},
     libraryViewModel: RecordingLibraryViewModel? = null,
     selectedTab: Int = 0,
     onTabSelected: (Int) -> Unit = {},
@@ -193,9 +191,7 @@ fun DashboardScreen(
                 Jkt48LiveMonitorScreen(
                     uiState = jkt48UiState,
                     apiKey = jkt48ApiKey,
-                    directRecordingStatus = directRecordingStatus,
-                    directRecordingDurationMs = directRecordingDurationMs,
-                    activeRecordingMember = activeRecordingMember,
+                    recordingSessions = recordingSessions,
                     onRefresh = onRefreshJkt48,
                     onToggleFavorite = onToggleFavoriteJkt48,
                     onSaveApiKey = onSaveJkt48ApiKey,

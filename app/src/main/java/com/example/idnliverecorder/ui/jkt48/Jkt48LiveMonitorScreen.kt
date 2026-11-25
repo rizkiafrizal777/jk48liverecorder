@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -64,6 +65,8 @@ import coil.compose.AsyncImage
 import com.example.idnliverecorder.core.formatDuration
 import com.example.idnliverecorder.monitoring.jkt48.Jkt48LiveMember
 import com.example.idnliverecorder.recording.direct.DirectStreamStatus
+import com.example.idnliverecorder.recording.direct.DirectRecordingService
+import com.example.idnliverecorder.recording.direct.DirectRecordingSessionState
 import com.example.idnliverecorder.ui.theme.AccentAmber
 import com.example.idnliverecorder.ui.theme.AccentCyan
 import com.example.idnliverecorder.ui.theme.AccentGreen
@@ -84,14 +87,12 @@ import java.util.Locale
 fun Jkt48LiveMonitorScreen(
     uiState: Jkt48LiveUiState,
     apiKey: String,
-    directRecordingStatus: DirectStreamStatus = DirectStreamStatus.SOURCE_UNAVAILABLE,
-    directRecordingDurationMs: Long = 0L,
-    activeRecordingMember: String? = null,
+    recordingSessions: List<DirectRecordingSessionState> = emptyList(),
     onRefresh: () -> Unit,
     onToggleFavorite: (String) -> Unit,
     onSaveApiKey: (String) -> Unit,
     onStartDirectRecording: (Jkt48LiveMember) -> Unit = {},
-    onStopDirectRecording: () -> Unit = {},
+    onStopDirectRecording: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showApiKeyDialog by remember { mutableStateOf(false) }
@@ -227,54 +228,64 @@ fun Jkt48LiveMonitorScreen(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Active Background Recording Banner (if service is running)
-        if (directRecordingStatus == DirectStreamStatus.RECORDING && !activeRecordingMember.isNullOrBlank()) {
-            Box(
+        val activeRecordings = recordingSessions.filter {
+            it.status == DirectStreamStatus.RECORDING || it.status == DirectStreamStatus.FINALIZING
+        }
+        if (activeRecordings.isNotEmpty()) {
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(PrimaryRed.copy(alpha = 0.15f))
-                    .border(1.dp, PrimaryRed, RoundedCornerShape(12.dp))
-                    .padding(12.dp)
+                    .background(PrimaryRed.copy(alpha = 0.10f))
+                    .border(1.dp, PrimaryRed.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
+                    Text(
+                        text = "${activeRecordings.size}/${DirectRecordingService.MAX_CONCURRENT_RECORDINGS} live direkam",
+                        color = TextPrimary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "Berjalan di latar belakang",
+                        color = TextSecondary,
+                        fontSize = 11.sp
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(activeRecordings, key = { it.sessionId }) { session ->
+                        Row(
                             modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(PrimaryRed)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(SurfaceVariantDark)
+                                .padding(start = 10.dp, end = 2.dp, top = 2.dp, bottom = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
-                                text = "Sedang merekam: $activeRecordingMember",
+                                text = session.memberName,
                                 color = TextPrimary,
                                 fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
-                            Text(
-                                text = "Durasi ${directRecordingDurationMs.formatDuration()} · berjalan di latar belakang",
-                                color = AccentCyan,
-                                fontSize = 11.sp,
-                                fontFamily = FontFamily.Monospace
-                            )
+                            IconButton(
+                                onClick = { onStopDirectRecording(session.sessionId) },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Stop,
+                                    contentDescription = "Hentikan rekaman ${session.memberName}",
+                                    tint = PrimaryRed,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                         }
-                    }
-
-                    Button(
-                        onClick = onStopDirectRecording,
-                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryRed),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.height(32.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(text = "Stop", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -282,7 +293,6 @@ fun Jkt48LiveMonitorScreen(
         }
 
         Spacer(modifier = Modifier.height(14.dp))
-
         // Content Area based on UiState
         when (uiState) {
             is Jkt48LiveUiState.Loading -> {
@@ -482,17 +492,20 @@ fun Jkt48LiveMonitorScreen(
                     }
 
                     items(uiState.members, key = { it.sessionKey }) { member ->
-                        val isRecordingThisMember = (directRecordingStatus == DirectStreamStatus.RECORDING &&
-                                activeRecordingMember == member.memberName)
+                        val activeSession = recordingSessions.firstOrNull {
+                            it.sessionId == member.sessionKey &&
+                                it.status in setOf(DirectStreamStatus.RECORDING, DirectStreamStatus.FINALIZING)
+                        }
 
                         LiveMemberCard(
                             member = member,
-                            isRecordingActive = isRecordingThisMember,
-                            recordingDurationMs = directRecordingDurationMs,
+                            isRecordingActive = activeSession != null,
+                            recordingDurationMs = activeSession?.durationMs ?: 0L,
                             onCardClick = { selectedMemberForDetail = member },
                             onToggleFavorite = { onToggleFavorite(member.memberName) },
                             onRequestRecord = { memberToConfirmRecording = member },
-                            onStopRecord = onStopDirectRecording
+                            onStopRecord = { activeSession?.let { onStopDirectRecording(it.sessionId) } },
+                            canStartRecording = recordingSessions.size < DirectRecordingService.MAX_CONCURRENT_RECORDINGS
                         )
                     }
                 }
@@ -511,7 +524,8 @@ private fun LiveMemberCard(
     onCardClick: () -> Unit,
     onToggleFavorite: () -> Unit,
     onRequestRecord: () -> Unit,
-    onStopRecord: () -> Unit
+    onStopRecord: () -> Unit,
+    canStartRecording: Boolean
 ) {
     val borderColor = if (isRecordingActive) PrimaryRed else CardBorder
 
@@ -709,13 +723,21 @@ private fun LiveMemberCard(
             } else {
                 OutlinedButton(
                     onClick = onRequestRecord,
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = AccentCyan),
+                    enabled = canStartRecording,
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = AccentCyan,
+                        disabledContentColor = TextTertiary
+                    ),
                     shape = RoundedCornerShape(6.dp),
                     modifier = Modifier.height(28.dp)
                 ) {
                     Icon(imageVector = Icons.Default.Videocam, contentDescription = null, modifier = Modifier.size(12.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(text = "Direct Record", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = if (canStartRecording) "Rekam" else "Batas 5",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }

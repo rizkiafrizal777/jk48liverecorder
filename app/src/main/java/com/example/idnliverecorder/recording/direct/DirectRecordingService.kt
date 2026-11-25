@@ -19,7 +19,6 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.idnliverecorder.MainActivity
 import com.example.idnliverecorder.R
-import com.example.idnliverecorder.core.formatDuration
 import com.example.idnliverecorder.core.formatFileSize
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -34,7 +33,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.UUID
+
+data class DirectRecordingSessionState(
+    val sessionId: String,
+    val memberName: String,
+    val status: DirectStreamStatus,
+    val startedAtMs: Long,
+    val durationMs: Long
+)
 
 /**
  * Android Foreground Service for Phase 5 Direct Livestream Recording (Phase 8 Reliability).
@@ -57,28 +64,35 @@ class DirectRecordingService : Service() {
 
         const val EXTRA_STREAM_URL = "extra_stream_url"
         const val EXTRA_MEMBER_NAME = "extra_member_name"
+        const val EXTRA_SESSION_ID = "extra_session_id"
+        const val MAX_CONCURRENT_RECORDINGS = 5
 
         private val _engineStatus = MutableStateFlow(DirectStreamStatus.SOURCE_UNAVAILABLE)
         val engineStatus: StateFlow<DirectStreamStatus> = _engineStatus.asStateFlow()
 
-        private val _recordingDurationMs = MutableStateFlow(0L)
-        val recordingDurationMs: StateFlow<Long> = _recordingDurationMs.asStateFlow()
+        private val _recordingSessions = MutableStateFlow<List<DirectRecordingSessionState>>(emptyList())
+        val recordingSessions: StateFlow<List<DirectRecordingSessionState>> = _recordingSessions.asStateFlow()
 
-        private val _currentMemberName = MutableStateFlow<String?>(null)
-        val currentMemberName: StateFlow<String?> = _currentMemberName.asStateFlow()
-
-        fun isRecording(): Boolean = _engineStatus.value == DirectStreamStatus.RECORDING
+        fun isRecording(): Boolean = _recordingSessions.value.any { it.status == DirectStreamStatus.RECORDING }
     }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var timerJob: Job? = null
-    private var recordingEngine: DirectStreamRecordingEngine? = null
+    private data class ActiveSession(
+        val id: String,
+        val memberName: String,
+        val startedAtMs: Long,
+        val engine: DirectStreamRecordingEngine,
+        var status: DirectStreamStatus = DirectStreamStatus.READY_TO_RECORD,
+        var isStopping: Boolean = false
+    )
+    private val sessions = linkedMapOf<String, ActiveSession>()
+    private var isForegroundStarted = false
+    private var latestStartId = 0
 
     private var connectivityManager: ConnectivityManager? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
-    private var startTimeMs = 0L
-    private val isStoppingInProgress = AtomicBoolean(false)
 
     override fun onCreate() {
         super.onCreate()
@@ -88,6 +102,7 @@ class DirectRecordingService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        latestStartId = startId
         val action = intent?.action ?: return START_NOT_STICKY
         Log.d(TAG, "onStartCommand: action=$action")
 
@@ -95,132 +110,147 @@ class DirectRecordingService : Service() {
             ACTION_START_DIRECT -> {
                 val streamUrl = intent.getStringExtra(EXTRA_STREAM_URL) ?: ""
                 val memberName = intent.getStringExtra(EXTRA_MEMBER_NAME) ?: "JKT48"
-                startDirectRecording(streamUrl, memberName)
+                val sessionId = intent.getStringExtra(EXTRA_SESSION_ID) ?: UUID.randomUUID().toString()
+                startDirectRecording(sessionId, streamUrl, memberName)
             }
 
             ACTION_STOP_DIRECT -> {
-                stopDirectRecording()
+                val sessionId = intent.getStringExtra(EXTRA_SESSION_ID)
+                if (sessionId.isNullOrBlank()) stopDirectRecording() else stopDirectRecording(sessionId)
             }
         }
 
         return START_NOT_STICKY
     }
 
-    private fun startDirectRecording(streamUrl: String, memberName: String) {
-        if (isStoppingInProgress.get()) {
-            Log.w(TAG, "Ignoring direct recording start while the current session is finalizing.")
+    private fun startDirectRecording(sessionId: String, streamUrl: String, memberName: String) {
+        if (sessionId in sessions) return
+        if (sessions.size >= MAX_CONCURRENT_RECORDINGS) {
+            showErrorNotification("Batas rekaman tercapai", "Maksimal $MAX_CONCURRENT_RECORDINGS live dapat direkam bersamaan.")
+            return
+        }
+        if (streamUrl.isBlank()) {
+            showErrorNotification("Sumber live tidak tersedia", "URL stream untuk $memberName kosong.")
             return
         }
 
-        if (recordingEngine?.isRunning == true) {
-            Log.w(TAG, "Ignoring duplicate direct recording start; an engine is already running.")
-            return
-        }
-
-        isStoppingInProgress.set(false)
-        _currentMemberName.value = memberName
-        startTimeMs = System.currentTimeMillis()
-        _recordingDurationMs.value = 0L
-
-        // Start Foreground immediately
-        val initialNotification = buildNotification(memberName, 0L)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                startForeground(NOTIFICATION_ID, initialNotification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-            } else {
-                startForeground(NOTIFICATION_ID, initialNotification)
-            }
-        } else {
-            startForeground(NOTIFICATION_ID, initialNotification)
-        }
-
-        lateinit var newEngine: DirectStreamRecordingEngine
-        newEngine = DirectStreamRecordingEngine(
+        lateinit var engine: DirectStreamRecordingEngine
+        engine = DirectStreamRecordingEngine(
             context = applicationContext,
             streamUrl = streamUrl,
             memberName = memberName,
-            onStatusChanged = { status, msg ->
-                if (recordingEngine !== newEngine) {
-                    Log.w(TAG, "Ignoring status from an inactive recording engine: $status")
-                } else {
-                    _engineStatus.value = status
-                    Log.d(TAG, "Engine status changed: $status — $msg")
-                    if (status == DirectStreamStatus.COMPLETED || status == DirectStreamStatus.ERROR) {
-                        stopDirectRecording()
-                    }
+            onStatusChanged = { status, message ->
+                serviceScope.launch {
+                    val active = sessions[sessionId]
+                    if (active == null || active.engine !== engine) return@launch
+                    active.status = status
+                    publishSessionState()
+                    Log.d(TAG, "[$sessionId] Engine status changed: $status - $message")
+                    updateNotification()
+                    if (status == DirectStreamStatus.COMPLETED ||
+                        status == DirectStreamStatus.ERROR ||
+                        status == DirectStreamStatus.SOURCE_UNAVAILABLE
+                    ) stopDirectRecording(sessionId)
                 }
             }
         )
-        recordingEngine = newEngine
+        val session = ActiveSession(sessionId, memberName, System.currentTimeMillis(), engine)
+        sessions[sessionId] = session
+        publishSessionState()
 
-        val started = newEngine.start()
-        if (!started) {
-            Log.e(TAG, "Direct recording engine failed to start.")
-            stopDirectRecording()
+        if (!isForegroundStarted) {
+            val notification = buildNotification()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+                } else startForeground(NOTIFICATION_ID, notification)
+            } else startForeground(NOTIFICATION_ID, notification)
+            isForegroundStarted = true
+        } else updateNotification()
+
+        if (!engine.start()) {
+            stopDirectRecording(sessionId)
             return
         }
+        session.status = DirectStreamStatus.RECORDING
+        publishSessionState()
+        startTimerIfNeeded()
+        updateNotification()
+    }
 
-        _engineStatus.value = DirectStreamStatus.RECORDING
+    private fun stopDirectRecording(sessionId: String? = null) {
+        sessions.values.filter { sessionId == null || it.id == sessionId }.forEach { session ->
+            if (session.isStopping) return@forEach
+            session.isStopping = true
+            session.status = DirectStreamStatus.FINALIZING
+            publishSessionState()
+            serviceScope.launch {
+                val summary = withContext(NonCancellable) { session.engine.stopAndAwait() }
+                session.engine.release()
+                sessions.remove(session.id)
+                if (summary?.isSuccess == true) {
+                    showCompletionNotification(
+                        memberName = session.memberName,
+                        displayName = summary.displayName,
+                        sizeBytes = summary.sizeBytes,
+                        videoUri = summary.uri,
+                        warningMessage = summary.warningMessage
+                    )
+                    _engineStatus.value = DirectStreamStatus.COMPLETED
+                } else {
+                    showErrorNotification(
+                        title = "Perekaman ${session.memberName} bermasalah",
+                        message = summary?.errorMessage ?: "Gagal menyimpan file rekaman stream."
+                    )
+                    _engineStatus.value = DirectStreamStatus.ERROR
+                }
+                publishSessionState()
+                updateNotification()
+                if (sessions.isEmpty()) {
+                    timerJob?.cancel()
+                    timerJob = null
+                    if (isForegroundStarted) stopForeground(STOP_FOREGROUND_REMOVE)
+                    isForegroundStarted = false
+                    stopSelfResult(latestStartId)
+                }
+            }
+        }
+    }
 
-        // Start 1-second duration timer for notification updates
-        timerJob?.cancel()
+    private fun publishSessionState() {
+        val now = System.currentTimeMillis()
+        val states = sessions.values.map { session ->
+            DirectRecordingSessionState(
+                sessionId = session.id,
+                memberName = session.memberName,
+                status = session.status,
+                startedAtMs = session.startedAtMs,
+                durationMs = (now - session.startedAtMs).coerceAtLeast(0L)
+            )
+        }
+        _recordingSessions.value = states
+        if (states.any { it.status == DirectStreamStatus.RECORDING }) {
+            _engineStatus.value = DirectStreamStatus.RECORDING
+        } else if (states.any { it.status == DirectStreamStatus.FINALIZING }) {
+            _engineStatus.value = DirectStreamStatus.FINALIZING
+        } else if (states.isEmpty() &&
+            _engineStatus.value != DirectStreamStatus.COMPLETED &&
+            _engineStatus.value != DirectStreamStatus.ERROR
+        ) {
+            _engineStatus.value = DirectStreamStatus.SOURCE_UNAVAILABLE
+        }
+    }
+
+    private fun startTimerIfNeeded() {
+        if (timerJob?.isActive == true) return
         timerJob = serviceScope.launch {
-            while (isActive && _engineStatus.value == DirectStreamStatus.RECORDING) {
+            while (isActive && sessions.isNotEmpty()) {
                 delay(1000)
-                val duration = System.currentTimeMillis() - startTimeMs
-                _recordingDurationMs.value = duration
-                updateNotification(memberName, duration)
+                publishSessionState()
+                updateNotification()
             }
         }
     }
-
-    private fun stopDirectRecording() {
-        if (!isStoppingInProgress.compareAndSet(false, true)) {
-            Log.d(TAG, "Stop already in progress for DirectRecordingService.")
-            return
-        }
-
-        Log.d(TAG, "Stopping DirectRecordingService gracefully...")
-        timerJob?.cancel()
-        timerJob = null
-
-        _engineStatus.value = DirectStreamStatus.FINALIZING
-
-        serviceScope.launch {
-            val engine = recordingEngine
-            val summary = withContext(NonCancellable) {
-                engine?.stopAndAwait()
-            }
-
-            recordingEngine?.release()
-            recordingEngine = null
-
-            val savedMemberName = _currentMemberName.value ?: "JKT48"
-            _currentMemberName.value = null
-
-            if (summary != null && summary.isSuccess) {
-                _engineStatus.value = DirectStreamStatus.COMPLETED
-                showCompletionNotification(
-                    memberName = savedMemberName,
-                    displayName = summary.displayName,
-                    sizeBytes = summary.sizeBytes,
-                    videoUri = summary.uri,
-                    warningMessage = summary.warningMessage
-                )
-            } else {
-                _engineStatus.value = DirectStreamStatus.ERROR
-                showErrorNotification(
-                    title = "Perekaman Selesai dengan Masalah",
-                    message = summary?.errorMessage ?: "Gagal menyimpan file rekaman stream."
-                )
-            }
-
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
-            isStoppingInProgress.set(false)
-        }
-    }
-
     private fun showCompletionNotification(
         memberName: String,
         displayName: String,
@@ -252,7 +282,8 @@ class DirectRecordingService : Service() {
             .addAction(android.R.drawable.ic_menu_view, "Buka Library", openAppPendingIntent)
             .build()
 
-        nm.notify(NOTIFICATION_COMPLETED_ID, notification)
+        val notificationId = 50_000 + (displayName.hashCode() and 0x7FFF)
+        nm.notify(notificationId, notification)
     }
 
     private fun showErrorNotification(title: String, message: String) {
@@ -274,7 +305,8 @@ class DirectRecordingService : Service() {
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
 
-        nm.notify(NOTIFICATION_ERROR_ID, notification)
+        val notificationId = 100_000 + (title.hashCode() and 0x7FFF)
+        nm.notify(notificationId, notification)
     }
 
     private fun createNotificationChannel() {
@@ -292,7 +324,7 @@ class DirectRecordingService : Service() {
         }
     }
 
-    private fun buildNotification(memberName: String, durationMs: Long): Notification {
+    private fun buildNotification(): Notification {
         val openAppIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
@@ -309,23 +341,27 @@ class DirectRecordingService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val durationFormatted = durationMs.formatDuration()
+        val activeCount = sessions.size
+        val memberSummary = sessions.values.take(3).joinToString(", ") { it.memberName }
+        val extraCount = (sessions.size - 3).coerceAtLeast(0)
+        val summary = if (extraCount > 0) "$memberSummary, +$extraCount lainnya" else memberSummary
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Merekam Direct Stream: $memberName")
-            .setContentText("Durasi: $durationFormatted • IDN Live di Latar Belakang")
+            .setContentTitle("Merekam $activeCount live")
+            .setContentText(summary.ifBlank { "Perekaman live berjalan di latar belakang" })
             .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(openAppPendingIntent)
             .setOngoing(true)
-            .addAction(android.R.drawable.ic_media_pause, "Stop Recording", stopPendingIntent)
+            .addAction(android.R.drawable.ic_media_pause, "Hentikan semua", stopPendingIntent)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .build()
     }
 
-    private fun updateNotification(memberName: String, durationMs: Long) {
+    private fun updateNotification() {
+        if (!isForegroundStarted || sessions.isEmpty()) return
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        nm.notify(NOTIFICATION_ID, buildNotification(memberName, durationMs))
+        nm.notify(NOTIFICATION_ID, buildNotification())
     }
 
     private fun registerNetworkMonitoring() {
@@ -358,8 +394,13 @@ class DirectRecordingService : Service() {
         try {
             networkCallback?.let { connectivityManager?.unregisterNetworkCallback(it) }
         } catch (_: Exception) {}
-        recordingEngine?.release()
-        recordingEngine = null
+        sessions.values.forEach { it.engine.release() }
+        sessions.clear()
+        _recordingSessions.value = emptyList()
+        if (_engineStatus.value == DirectStreamStatus.RECORDING ||
+            _engineStatus.value == DirectStreamStatus.FINALIZING
+        ) _engineStatus.value = DirectStreamStatus.SOURCE_UNAVAILABLE
+        isForegroundStarted = false
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
