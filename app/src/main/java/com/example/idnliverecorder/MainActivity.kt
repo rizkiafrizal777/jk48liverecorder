@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.idnliverecorder.core.Constants
 import com.example.idnliverecorder.library.ui.RecordingLibraryViewModel
+import com.example.idnliverecorder.recording.direct.DirectRecordingService
 import com.example.idnliverecorder.ui.dashboard.DashboardScreen
 import com.example.idnliverecorder.ui.dashboard.DashboardViewModel
 import com.example.idnliverecorder.ui.jkt48.Jkt48LiveViewModel
@@ -82,6 +83,26 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         viewModel.refreshPermissions()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        notifyRecordingServiceVisibility(visible = true)
+    }
+
+    override fun onStop() {
+        notifyRecordingServiceVisibility(visible = false)
+        super.onStop()
+    }
+
+    private fun notifyRecordingServiceVisibility(visible: Boolean) {
+        if (DirectRecordingService.recordingSessions.value.isEmpty()) return
+        val action = if (visible) {
+            DirectRecordingService.ACTION_APP_ENTERED_FOREGROUND
+        } else {
+            DirectRecordingService.ACTION_APP_ENTERED_BACKGROUND
+        }
+        startService(Intent(this, DirectRecordingService::class.java).setAction(action))
     }
 
     override fun onNewIntent(intent: Intent) {

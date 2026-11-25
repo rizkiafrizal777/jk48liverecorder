@@ -15,6 +15,7 @@ import android.net.NetworkRequest
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.idnliverecorder.MainActivity
@@ -61,6 +62,8 @@ class DirectRecordingService : Service() {
 
         const val ACTION_START_DIRECT = "com.example.idnliverecorder.ACTION_START_DIRECT_RECORDING"
         const val ACTION_STOP_DIRECT = "com.example.idnliverecorder.ACTION_STOP_DIRECT_RECORDING"
+        const val ACTION_APP_ENTERED_FOREGROUND = "com.example.idnliverecorder.ACTION_APP_ENTERED_FOREGROUND"
+        const val ACTION_APP_ENTERED_BACKGROUND = "com.example.idnliverecorder.ACTION_APP_ENTERED_BACKGROUND"
 
         const val EXTRA_STREAM_URL = "extra_stream_url"
         const val EXTRA_MEMBER_NAME = "extra_member_name"
@@ -89,6 +92,9 @@ class DirectRecordingService : Service() {
     private val sessions = linkedMapOf<String, ActiveSession>()
     private var isForegroundStarted = false
     private var latestStartId = 0
+    private val backgroundTimeoutPolicy = RecordingBackgroundTimeoutPolicy()
+    private var backgroundStopJob: Job? = null
+    private var wasStoppedBySystemTimeout = false
 
     private var connectivityManager: ConnectivityManager? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
@@ -118,6 +124,9 @@ class DirectRecordingService : Service() {
                 val sessionId = intent.getStringExtra(EXTRA_SESSION_ID)
                 if (sessionId.isNullOrBlank()) stopDirectRecording() else stopDirectRecording(sessionId)
             }
+
+            ACTION_APP_ENTERED_FOREGROUND -> handleAppEnteredForeground()
+            ACTION_APP_ENTERED_BACKGROUND -> handleAppEnteredBackground()
         }
 
         return START_NOT_STICKY
@@ -176,6 +185,45 @@ class DirectRecordingService : Service() {
         publishSessionState()
         startTimerIfNeeded()
         updateNotification()
+    }
+
+    private fun handleAppEnteredForeground() {
+        backgroundTimeoutPolicy.onAppForegrounded()
+        backgroundStopJob?.cancel()
+        backgroundStopJob = null
+    }
+
+    private fun handleAppEnteredBackground() {
+        if (sessions.isEmpty()) return
+        backgroundTimeoutPolicy.onAppBackgrounded(SystemClock.elapsedRealtime())
+        backgroundStopJob?.cancel()
+        val remainingMs = backgroundTimeoutPolicy.millisUntilGracefulStop(SystemClock.elapsedRealtime()) ?: return
+        backgroundStopJob = serviceScope.launch {
+            delay(remainingMs)
+            if (sessions.isNotEmpty() &&
+                backgroundTimeoutPolicy.millisUntilGracefulStop(SystemClock.elapsedRealtime()) == 0L
+            ) {
+                showErrorNotification(
+                    title = "Rekaman dihentikan otomatis",
+                    message = "Batas aman perekaman di latar belakang tercapai. File yang ada sedang diselesaikan."
+                )
+                stopDirectRecording()
+            }
+        }
+    }
+
+    override fun onTimeout(startId: Int, foregroundServiceType: Int) {
+        Log.e(TAG, "Android data-sync foreground-service timeout reached; stopping active engines immediately.")
+        showErrorNotification(
+            title = "Batas waktu Android tercapai",
+            message = "Sesi dihentikan oleh sistem; file yang sedang direkam mungkin belum selesai disimpan."
+        )
+        wasStoppedBySystemTimeout = true
+        backgroundStopJob?.cancel()
+        sessions.values.toList().forEach { it.engine.stop() }
+        if (isForegroundStarted) stopForeground(STOP_FOREGROUND_REMOVE)
+        isForegroundStarted = false
+        stopSelf(startId)
     }
 
     private fun stopDirectRecording(sessionId: String? = null) {
@@ -394,7 +442,9 @@ class DirectRecordingService : Service() {
         try {
             networkCallback?.let { connectivityManager?.unregisterNetworkCallback(it) }
         } catch (_: Exception) {}
-        sessions.values.forEach { it.engine.release() }
+        if (!wasStoppedBySystemTimeout) {
+            sessions.values.forEach { it.engine.release() }
+        }
         sessions.clear()
         _recordingSessions.value = emptyList()
         if (_engineStatus.value == DirectStreamStatus.RECORDING ||

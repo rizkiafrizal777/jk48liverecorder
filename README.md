@@ -46,6 +46,8 @@ Alur perekaman langsung: pengguna memilih live → ViewModel mengirim URL stream
 
 Service membatasi jumlah sesi yang sedang berjalan atau difinalisasi sampai lima. Tombol di layar Live menghentikan sesi tertentu; aksi Stop pada notifikasi menghentikan seluruh sesi. Setiap sesi memakai cache dan nama file unik.
 
+Untuk memberi waktu finalisasi sebelum batas foreground service Android, aplikasi menghentikan dan menyimpan sesi setelah sekitar **5 jam 45 menit terus-menerus di latar belakang**. Saat aplikasi dibuka kembali, hitungan latar belakang dimulai ulang. Batas ini berlaku pada aplikasi, bukan per stream.
+
 ## Struktur kode utama
 
 ```text
@@ -135,5 +137,6 @@ Uji perekaman beberapa live di perangkat nyata juga diperlukan. Jumlah stream ya
 
 - Perekaman langsung bergantung pada URL stream yang diberikan API dan format HLS yang dapat diproses aplikasi.
 - Batas lima adalah batas aplikasi; perangkat dengan jaringan atau sumber daya terbatas mungkin tidak mampu menjaga lima stream tetap stabil.
+- Android dapat menghentikan service lebih awal jika batas `dataSync` aplikasi telah digunakan oleh service lain; callback batas sistem menjadi pengaman terakhir dan file yang sedang diproses mungkin tidak sempat difinalisasi sepenuhnya.
 - Perekaman berjalan dalam service yang tidak meminta Android memulai ulang otomatis setelah proses aplikasi dihentikan paksa atau proses dimatikan sistem.
 - API key tetap berada di memori aplikasi dan dikirim sebagai parameter permintaan HTTPS; enkripsi lokal tidak menjadikannya rahasia bersama yang aman untuk ditanamkan ke APK publik.
